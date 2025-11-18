@@ -1,16 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { StorageConfig, ConfigStore } from '../services/configStore'
 import './StorageSetup.css'
 
 interface StorageSetupProps {
+  open: boolean
+  onClose: () => void
   onConfigured: (config: StorageConfig) => void
 }
 
-function StorageSetup({ onConfigured }: StorageSetupProps) {
+function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
+  if (!open) return null
   const [provider, setProvider] = useState<'local' | 'google-drive' | 's3' | 'digitalocean'>('local')
   const [showInfo, setShowInfo] = useState(true)
   const store = new ConfigStore()
-  const isPremium = store.isPremium()
+  const [isPremium, setIsPremium] = useState(store.isPremium())
+
+  useEffect(() => {
+    const handlePremiumChange = () => setIsPremium(store.isPremium())
+    window.addEventListener('premium-changed', handlePremiumChange)
+    return () => window.removeEventListener('premium-changed', handlePremiumChange)
+  }, [store])
   const [formData, setFormData] = useState({
     // Google Drive
     gdClientId: '',
@@ -69,7 +78,9 @@ function StorageSetup({ onConfigured }: StorageSetupProps) {
   }
 
   return (
-    <div className="storage-setup">
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal clean" onClick={(e) => e.stopPropagation()}>
+        <div className="storage-setup">
       <h2>🔒 Configure Storage</h2>
       <p className="subtitle">Choose where to store your encrypted passwords</p>
 
@@ -282,6 +293,8 @@ function StorageSetup({ onConfigured }: StorageSetupProps) {
           Continue
         </button>
       </form>
+    </div>
+      </div>
     </div>
   )
 }

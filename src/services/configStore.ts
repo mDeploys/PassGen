@@ -49,7 +49,7 @@ export class ConfigStore {
       (window as any)?.PASSGEN_SELLER_SECRET ||
       localStorage.getItem('passgen-seller-secret') ||
       (import.meta as any)?.env?.VITE_SELLER_SECRET ||
-      'PG-SEC-2025' // fallback
+      'W1IcMo9/5Kw7Mu+kFsXgoep4bcKzfvofElTnvra7PD8=' // fallback
     )
   }
 
@@ -81,6 +81,7 @@ export class ConfigStore {
 
   setPremium(value: boolean): void {
     localStorage.setItem('passgen-premium', value ? 'true' : 'false')
+    window.dispatchEvent(new Event('premium-changed'))
   }
 
   getStorageConfig(): StorageConfig | null {

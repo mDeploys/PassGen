@@ -89,6 +89,18 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
 
   if (!open) return null
 
+  if (store.isPremium()) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal clean" onClick={(e) => e.stopPropagation()}>
+          <h2>🎉 You are already a Premium user!</h2>
+          <p>Enjoy unlimited passwords and cloud sync.</p>
+          <button className="btn-primary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal clean" onClick={(e) => e.stopPropagation()}>

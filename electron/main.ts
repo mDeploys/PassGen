@@ -31,7 +31,7 @@ function setApplicationMenu() {
         {
           label: 'Upgrade to Premium',
           click: () => {
-            mainWindow?.webContents.send('open-upgrade')
+            mainWindow?.webContents.executeJavaScript(`window.dispatchEvent(new Event('open-upgrade'))`)
           }
         },
         { type: 'separator' },

@@ -40,15 +40,19 @@ function App() {
   })
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [showTerms, setShowTerms] = useState(false)
+  const [showStorageSetup, setShowStorageSetup] = useState(false)
 
   useEffect(() => {
     const openUpgrade = () => setShowUpgrade(true)
     const openTerms = () => setShowTerms(true)
+    const openStorageSetup = () => setShowStorageSetup(true)
     window.addEventListener('open-upgrade', openUpgrade as EventListener)
     window.addEventListener('open-terms', openTerms as EventListener)
+    window.addEventListener('open-storage-setup', openStorageSetup as EventListener)
     return () => {
       window.removeEventListener('open-upgrade', openUpgrade as EventListener)
       window.removeEventListener('open-terms', openTerms as EventListener)
+      window.removeEventListener('open-storage-setup', openStorageSetup as EventListener)
     }
   }, [])
 
@@ -70,7 +74,12 @@ function App() {
   const handleStorageConfigured = async (config: any) => {
     try {
       await storageManager.initializeStorage(config)
-      setMode('auth')
+      const hasMasterHash = !!localStorage.getItem('passgen-master-hash')
+      if (hasMasterHash) {
+        setMode('vault')
+      } else {
+        setMode('auth')
+      }
     } catch (error) {
       alert('Failed to configure storage: ' + (error as Error).message)
     }
@@ -173,7 +182,7 @@ function App() {
           </button>
         </div>
         {mode === 'setup' && (
-          <StorageSetup onConfigured={handleStorageConfigured} />
+          <StorageSetup open={true} onClose={() => {}} onConfigured={handleStorageConfigured} />
         )}
 
         {mode === 'auth' && (
@@ -320,6 +329,7 @@ function App() {
       <AppFooter />
       <UpgradeModal open={showUpgrade} onClose={()=>setShowUpgrade(false)} />
       <TermsModal open={showTerms} onClose={()=>setShowTerms(false)} />
+      <StorageSetup open={showStorageSetup} onClose={()=>setShowStorageSetup(false)} onConfigured={handleStorageConfigured} />
     </div>
   )
 }

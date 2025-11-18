@@ -3,7 +3,7 @@ const crypto = require('crypto')
 
 const installId = '879d8494-2fe4-7fe1-a879-07f3fe3f9c26'
 const email = 'jnasser1983@gmail.com'
-const secret = 'W1IcMo9/5Kw7Mu+kFsXgoep4bcKzfvofElTnvra7PD8='
+const secret = 'PG-SEC-2025'
 
 // Exact same logic as generator
 const data = `${installId}|${email.trim().toLowerCase()}|${secret}`

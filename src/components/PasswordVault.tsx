@@ -56,6 +56,27 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
     }
   }
 
+  const exportToCSV = () => {
+    if (entries.length === 0) {
+      alert('No passwords to export')
+      return
+    }
+    const csvHeader = 'Name,Username,Password,URL,Notes,Created At,Updated At\n'
+    const csvRows = entries.map(entry =>
+      `"${entry.name}","${entry.username || ''}","${entry.password}","${entry.url || ''}","${entry.notes || ''}","${entry.createdAt}","${entry.updatedAt}"`
+    ).join('\n')
+    const csvContent = csvHeader + csvRows
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', 'passwords.csv')
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   const handleSaveEntry = async () => {
     if (!newEntry.name || !newEntry.password) {
       alert('Name and password are required')
@@ -113,7 +134,7 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
   return (
     <div className="password-vault">
       <div className="vault-header">
-        <h2>🔐 Password Vault</h2>
+        <h2>🔐 Password Vault {store.isPremium() && <span className="premium-badge">⭐ Premium</span>}</h2>
         <div className="vault-actions">
           <button onClick={onGenerateNew} className="action-btn">
             Generate New
@@ -124,9 +145,19 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
           <button onClick={loadEntries} className="action-btn" disabled={loading}>
             🔄 Refresh
           </button>
-          <button onClick={repairVault} className="action-btn" disabled={loading}>
-            🛠 Repair
+          {((import.meta as any)?.env?.DEV as boolean) === true && (
+            <button onClick={repairVault} className="action-btn" disabled={loading}>
+              🛠 Repair
+            </button>
+          )}
+          <button onClick={() => window.dispatchEvent(new Event('open-storage-setup'))} className="action-btn">
+            ⚙️ Change Storage
           </button>
+          {store.isPremium() && (
+            <button onClick={exportToCSV} className="action-btn">
+              📄 Export CSV
+            </button>
+          )}
         </div>
       </div>
 

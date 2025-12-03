@@ -13,7 +13,7 @@
   "options_page": "options.html",
   "action": {
     "default_title": "PassGen Autofill",
-    "default_popup": "options.html"
+    "default_popup": "popup.html"
   },
   "content_scripts": [
     {

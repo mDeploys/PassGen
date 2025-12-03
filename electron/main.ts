@@ -68,28 +68,7 @@ function setApplicationMenu() {
       submenu: [
         {
           label: 'Check for Updates',
-          click: () => {
-            mainWindow?.webContents.executeJavaScript(`
-              (async () => {
-                try {
-                  const res = await fetch('https://api.github.com/repos/Jalal-Nasser/PassGen-Releases/releases/latest');
-                  const data = await res.json();
-                  const latest = data.tag_name?.replace(/^v/, '');
-                  const url = data.html_url;
-                  const current = '1.0.4';
-                  if (latest && latest !== current) {
-                    if (confirm('New version ' + latest + ' available! Go to download page?')) {
-                      window.open(url, '_blank');
-                    }
-                  } else {
-                    alert('You have the latest version.');
-                  }
-                } catch(e) {
-                  alert('Update check failed: ' + e.message);
-                }
-              })()
-            `).catch(() => {})
-          }
+          click: () => { checkForUpdates(false) }
         },
         {
           label: 'About PassGen',
@@ -121,6 +100,23 @@ function setApplicationMenu() {
   Menu.setApplicationMenu(menu)
 }
 
+function parseSemver(v: string): [number, number, number] {
+  const m = (v || '').trim().replace(/^v/, '').split('.')
+  const toNum = (x: string) => {
+    const n = Number(x)
+    return Number.isFinite(n) ? n : 0
+  }
+  return [toNum(m[0]||'0'), toNum(m[1]||'0'), toNum(m[2]||'0')]
+}
+
+function isNewer(latest: string, current: string): boolean {
+  const [la, lb, lc] = parseSemver(latest)
+  const [ca, cb, cc] = parseSemver(current)
+  if (la !== ca) return la > ca
+  if (lb !== cb) return lb > cb
+  return lc > cc
+}
+
 async function checkForUpdates(silent = false) {
   try {
     const current = app.getVersion().replace(/^v/, '')
@@ -132,7 +128,7 @@ async function checkForUpdates(silent = false) {
       }
     )()`
     const { tag, url } = await (mainWindow?.webContents.executeJavaScript(js).catch(()=>({tag:'',url:''})) || Promise.resolve({tag:'',url:''}))
-    if (tag && tag !== current) {
+    if (tag && isNewer(tag, current)) {
       dialog.showMessageBox({
         type: 'info',
         title: 'Update Available',

@@ -18,7 +18,11 @@ async function getDomain() {
 
 async function tryAutofill() {
   const dom = await getDomain();
-  chrome.runtime.sendMessage({ type: 'passgen:listCandidates', domain: dom }, async (resp) => {
+  // Check allowlist first
+  chrome.storage.local.get(['allowlist'], (d) => {
+    const allowed = !!(d.allowlist || {})[dom];
+    if (!allowed) return; // no auto-fill unless allowed
+    chrome.runtime.sendMessage({ type: 'passgen:listCandidates', domain: dom }, async (resp) => {
     if (!resp || !resp.ok) return;
     const names = resp.names || [];
     if (!names.length) return;
@@ -29,6 +33,7 @@ async function tryAutofill() {
       if (!found) return;
       if (found.user) found.user.value = r.username || '';
       if (found.pass) found.pass.value = r.password || '';
+    });
     });
   });
 }

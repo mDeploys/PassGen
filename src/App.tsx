@@ -272,18 +272,18 @@ function App() {
         {mode === 'auth' && (
           <div className="auth-screen">
             <h1>🔐 PassGen</h1>
-            <p className="subtitle">Enter your master password</p>
+            <p className="subtitle">{localStorage.getItem('passgen-master-hash') ? 'Enter your master password' : 'Set a new master password'}</p>
             <div className="auth-form">
               <input
                 type="password"
                 value={masterPasswordInput}
                 onChange={(e) => setMasterPasswordInput(e.target.value)}
-                placeholder="Master Password (min 8 characters)"
+                placeholder={localStorage.getItem('passgen-master-hash') ? 'Master Password (min 8 characters)' : 'Create Master Password (min 8 characters)'}
                 className="auth-input"
                 onKeyPress={(e) => e.key === 'Enter' && handleMasterPasswordSubmit()}
               />
               <button onClick={handleMasterPasswordSubmit} className="auth-btn">
-                Unlock Vault
+                {localStorage.getItem('passgen-master-hash') ? 'Unlock Vault' : 'Set Master Password'}
               </button>
               <p className="auth-note">
                 This password encrypts/decrypts your stored passwords. Don't forget it!

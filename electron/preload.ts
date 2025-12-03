@@ -39,7 +39,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   close: () => ipcRenderer.send('window:close'),
   vaultUnlocked: () => ipcRenderer.send('vault:unlocked'),
   vaultLocked: () => ipcRenderer.send('vault:locked'),
-  getSessionToken: () => ipcRenderer.invoke('bridge:getToken')
+  getSessionToken: () => ipcRenderer.invoke('bridge:getToken'),
+  saveVaultFile: (data: string) => ipcRenderer.invoke('vault:save', data),
+  openVaultFile: () => ipcRenderer.invoke('vault:open')
 })
 
 declare global {

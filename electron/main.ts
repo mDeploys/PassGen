@@ -303,6 +303,39 @@ ipcMain.handle('bridge:getToken', async () => {
   return sessionToken || ''
 })
 
+// Vault export/import file dialogs
+ipcMain.handle('vault:save', async (_event, data: string) => {
+  const { filePath, canceled } = await dialog.showSaveDialog({
+    title: 'Export Vault Backup',
+    defaultPath: `passgen-vault-${Date.now()}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  })
+  if (canceled || !filePath) return { success: false }
+  try {
+    const fs = require('fs')
+    fs.writeFileSync(filePath, data, 'utf8')
+    return { success: true, path: filePath }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('vault:open', async () => {
+  const { filePaths, canceled } = await dialog.showOpenDialog({
+    title: 'Import Vault Backup',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    properties: ['openFile']
+  })
+  if (canceled || !filePaths || filePaths.length === 0) return { success: false }
+  try {
+    const fs = require('fs')
+    const data = fs.readFileSync(filePaths[0], 'utf8')
+    return { success: true, data }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
 // Session token management for extension bridge
 function generateSessionToken(): string {
   const buf = Buffer.alloc(16)

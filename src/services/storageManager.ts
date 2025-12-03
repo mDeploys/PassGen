@@ -186,6 +186,35 @@ export class StorageManager {
   }
 
   /**
+   * Export the encrypted vault data as a JSON string.
+   * Returns the raw encrypted vault for backup.
+   */
+  exportVault(): string {
+    const vaultData = localStorage.getItem('passgen-vault-data');
+    if (!vaultData) {
+      throw new Error('No vault data to export');
+    }
+    return vaultData;
+  }
+
+  /**
+   * Import encrypted vault data from a JSON string.
+   * Replaces the current vault with the imported data.
+   */
+  importVault(data: string): void {
+    try {
+      // Validate it's valid JSON
+      const parsed = JSON.parse(data);
+      if (!Array.isArray(parsed)) {
+        throw new Error('Invalid vault format');
+      }
+      localStorage.setItem('passgen-vault-data', data);
+    } catch (e) {
+      throw new Error('Invalid vault data: ' + (e as Error).message);
+    }
+  }
+
+  /**
    * Clears all local data and configuration so the app restarts the wizard.
    * This removes: storage config, master hash, and locally saved encrypted vault data.
    */

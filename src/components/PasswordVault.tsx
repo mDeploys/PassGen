@@ -89,6 +89,81 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
     }
   }
 
+  const handleExport = async () => {
+    try {
+      setLoading(true)
+      const data = storageManager.exportVault()
+      const api = (window as any).electronAPI
+      if (api && api.saveVaultFile) {
+        const result = await api.saveVaultFile(data)
+        if (result.success) {
+          alert('Vault backup exported successfully!')
+        } else {
+          alert('Export canceled or failed: ' + (result.error || ''))
+        }
+      } else {
+        // Fallback for web: download as file
+        const blob = new Blob([data], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `passgen-vault-${Date.now()}.json`
+        a.click()
+        URL.revokeObjectURL(url)
+        alert('Vault backup downloaded!')
+      }
+    } catch (e) {
+      alert('Export failed: ' + (e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleImport = async () => {
+    if (!confirm('Importing will replace your current vault. Make sure you have a backup! Continue?')) return
+    try {
+      setLoading(true)
+      const api = (window as any).electronAPI
+      let data: string
+      if (api && api.openVaultFile) {
+        const result = await api.openVaultFile()
+        if (!result.success) {
+          alert('Import canceled or failed: ' + (result.error || ''))
+          return
+        }
+        data = result.data
+      } else {
+        // Fallback for web: file input
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = '.json'
+        input.onchange = async (e: any) => {
+          const file = e.target?.files?.[0]
+          if (!file) return
+          const text = await file.text()
+          try {
+            storageManager.importVault(text)
+            await loadEntries()
+            alert('Vault imported successfully!')
+          } catch (err) {
+            alert('Import failed: ' + (err as Error).message)
+          } finally {
+            setLoading(false)
+          }
+        }
+        input.click()
+        return
+      }
+      storageManager.importVault(data)
+      await loadEntries()
+      alert('Vault imported successfully!')
+    } catch (e) {
+      alert('Import failed: ' + (e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const exportToCSV = () => {
     if (entries.length === 0) {
       alert('No passwords to export')
@@ -241,6 +316,8 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
                 <button onClick={repairVault} disabled={loading}>Repair Vault</button>
               )}
               <button onClick={() => window.dispatchEvent(new Event('open-storage-setup'))}>Change Storage</button>
+              <button onClick={handleExport} disabled={loading}>Export Vault Backup</button>
+              <button onClick={handleImport} disabled={loading}>Import Vault Backup</button>
               {store.isPremium() && (
                 <button onClick={exportToCSV}>Export to CSV</button>
               )}

@@ -288,15 +288,6 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
       <div className="vault-header">
         <div className="header-left">
           <h2>Password Vault {store.isPremium() && <span className="premium-badge">Premium</span>}</h2>
-          <div className="search-inline">
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input-inline"
-            />
-          </div>
         </div>
         <div className="vault-actions">
           <button onClick={onGenerateNew} className="btn-primary">
@@ -336,6 +327,16 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="search-bar">
+        <input
+          type="text"
+          placeholder="Search passwords..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
       </div>
 
       {showAddForm && (

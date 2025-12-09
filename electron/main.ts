@@ -267,6 +267,27 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   })
+
+  // Add loading indicator
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[WINDOW] App finished loading at http://127.0.0.1:27649')
+    // Check if localStorage is accessible
+    mainWindow?.webContents.executeJavaScript(`
+      (function() {
+        try {
+          const test = localStorage.getItem('passgen-install-id');
+          console.log('[STORAGE CHECK] localStorage accessible, found passgen-install-id:', test ? 'YES' : 'NO');
+          if (!test) {
+            console.log('[STORAGE CHECK] This is first-time setup or storage was cleared');
+          }
+        } catch (e) {
+          console.error('[STORAGE CHECK] Error accessing localStorage:', e.message);
+        }
+      })()
+    `).catch(err => {
+      console.error('[WINDOW] Error checking storage on load:', err)
+    })
+  })
 }
 
 // Window control IPC handlers
@@ -529,6 +550,13 @@ function startAppServer() {
     
     const distPath = path.join(__dirname, '../dist')
     const fs = require('fs')
+    const storageDir = path.join(app.getPath('userData'), 'Partitions', 'persist:passgen')
+    
+    // Ensure storage directory exists
+    if (!fs.existsSync(storageDir)) {
+      fs.mkdirSync(storageDir, { recursive: true })
+      console.log('[APP SERVER] Created storage directory:', storageDir)
+    }
     
     appServer = http.createServer((req, res) => {
       // Parse URL
@@ -588,7 +616,8 @@ function startAppServer() {
     appServer.listen(27649, '127.0.0.1', () => {
       console.log('[APP SERVER] Listening on http://127.0.0.1:27649')
       console.log('[APP SERVER] userData path:', app.getPath('userData'))
-      console.log('[APP SERVER] Partition: persist:passgen (localStorage will persist to:', path.join(app.getPath('userData'), 'Partitions/persist:passgen'), ')')
+      console.log('[APP SERVER] Partition storage dir:', storageDir)
+      console.log('[APP SERVER] Storage exists:', fs.existsSync(storageDir))
     })
   } catch (e) {
     console.error('[APP SERVER] Failed to start:', e)

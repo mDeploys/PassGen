@@ -268,6 +268,14 @@ function createWindow() {
     mainWindow = null;
   })
 
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('[WINDOW] did-fail-load:', { errorCode, errorDescription, validatedURL })
+  })
+
+  mainWindow.webContents.on('crashed', () => {
+    console.error('[WINDOW] Renderer process crashed!')
+  })
+
   // Add loading indicator
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[WINDOW] App finished loading at http://127.0.0.1:27649')
@@ -326,11 +334,11 @@ if (!gotTheLock) {
   // Note: partition: 'persist:passgen' in BrowserWindow webPreferences
   // automatically persists localStorage to disk in app userData directory
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     // Start app server in production before creating window
     const isDev = process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL
     if (!isDev) {
-      startAppServer()
+      await startAppServer()
     }
     createWindow()
     setApplicationMenu()
@@ -544,73 +552,86 @@ ipcMain.on('premium:changed', () => {
   setApplicationMenu()
 })
 
-function startAppServer() {
-  try {
-    if (appServer) return
-    
-    const distPath = path.join(__dirname, '../dist')
-    const fs = require('fs')
-    const storageDir = path.join(app.getPath('userData'), 'Partitions', 'persist:passgen')
-    
-    // Ensure storage directory exists
-    if (!fs.existsSync(storageDir)) {
-      fs.mkdirSync(storageDir, { recursive: true })
-      console.log('[APP SERVER] Created storage directory:', storageDir)
-    }
-    
-    appServer = http.createServer((req, res) => {
-      // Parse URL
-      let urlPath = req.url || '/'
-      if (urlPath.startsWith('?')) urlPath = '/'
-      
-      // Default to index.html for root
-      let filePath = urlPath === '/' ? path.join(distPath, 'index.html') : path.join(distPath, urlPath)
-      
-      // Security: prevent directory traversal
-      const realPath = require('path').resolve(filePath)
-      if (!realPath.startsWith(require('path').resolve(distPath))) {
-        res.writeHead(403, { 'Content-Type': 'text/plain' })
-        res.end('403 Forbidden')
+function startAppServer(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      if (appServer) {
+        resolve()
         return
       }
       
-      // Try to serve the file
-      fs.stat(filePath, (err: any, stats: any) => {
-        if (err || !stats.isFile()) {
-          // File not found, serve index.html for SPA routing
-          fs.readFile(path.join(distPath, 'index.html'), (err: any, content: any) => {
-            if (!err) {
-              res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-              res.end(content)
-            } else {
-              res.writeHead(404, { 'Content-Type': 'text/plain' })
-              res.end('404 Not Found')
-            }
-          })
+      const distPath = path.join(__dirname, '../dist')
+      const fs = require('fs')
+      const storageDir = path.join(app.getPath('userData'), 'Partitions', 'persist:passgen')
+      
+      // Ensure storage directory exists
+      if (!fs.existsSync(storageDir)) {
+        fs.mkdirSync(storageDir, { recursive: true })
+        console.log('[APP SERVER] Created storage directory:', storageDir)
+      }
+    
+    appServer = http.createServer((req, res) => {
+      console.log('[APP SERVER] Request:', req.method, req.url)
+      try {
+        // Parse URL
+        let urlPath = req.url || '/'
+        if (urlPath.startsWith('?')) urlPath = '/'
+        // Default to index.html for root
+        let filePath = urlPath === '/' ? path.join(distPath, 'index.html') : path.join(distPath, urlPath)
+        // Security: prevent directory traversal
+        const realPath = require('path').resolve(filePath)
+        if (!realPath.startsWith(require('path').resolve(distPath))) {
+          res.writeHead(403, { 'Content-Type': 'text/plain' })
+          res.end('403 Forbidden')
           return
         }
-        
-        // File exists, serve it with appropriate MIME type
-        const ext = path.extname(filePath).toLowerCase()
-        const mimeTypes: {[key: string]: string} = {
-          '.html': 'text/html; charset=utf-8',
-          '.js': 'application/javascript; charset=utf-8',
-          '.css': 'text/css; charset=utf-8',
-          '.json': 'application/json',
-          '.png': 'image/png',
-          '.jpg': 'image/jpeg',
-          '.gif': 'image/gif',
-          '.svg': 'image/svg+xml',
-          '.ico': 'image/x-icon',
-          '.woff': 'font/woff',
-          '.woff2': 'font/woff2',
-          '.ttf': 'font/ttf'
-        }
-        
-        const contentType = mimeTypes[ext] || 'application/octet-stream'
-        res.writeHead(200, { 'Content-Type': contentType })
-        fs.createReadStream(filePath).pipe(res)
-      })
+        // Try to serve the file
+        fs.stat(filePath, (err, stats) => {
+          if (err || !stats.isFile()) {
+            // File not found, serve index.html for SPA routing
+            fs.readFile(path.join(distPath, 'index.html'), (err, content) => {
+              if (!err) {
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+                res.end(content)
+              } else {
+                console.error('[APP SERVER] Failed to serve index.html:', err)
+                res.writeHead(404, { 'Content-Type': 'text/plain' })
+                res.end('404 Not Found')
+              }
+            })
+            return
+          }
+          // File exists, serve it with appropriate MIME type
+          const ext = path.extname(filePath).toLowerCase()
+          const mimeTypes = {
+            '.html': 'text/html; charset=utf-8',
+            '.js': 'application/javascript; charset=utf-8',
+            '.css': 'text/css; charset=utf-8',
+            '.json': 'application/json',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.svg': 'image/svg+xml',
+            '.ico': 'image/x-icon',
+            '.woff': 'font/woff',
+            '.woff2': 'font/woff2',
+            '.ttf': 'font/ttf'
+          }
+          const contentType = mimeTypes[ext] || 'application/octet-stream'
+          res.writeHead(200, { 'Content-Type': contentType })
+          const stream = fs.createReadStream(filePath)
+          stream.on('error', (e) => {
+            console.error('[APP SERVER] Error streaming file', filePath, e)
+            res.writeHead(500, { 'Content-Type': 'text/plain' })
+            res.end('500 Internal Server Error')
+          })
+          stream.pipe(res)
+        })
+      } catch (e) {
+        console.error('[APP SERVER] Unexpected error:', e)
+        res.writeHead(500, { 'Content-Type': 'text/plain' })
+        res.end('500 Internal Server Error')
+      }
     })
     
     appServer.listen(27649, '127.0.0.1', () => {
@@ -618,10 +639,20 @@ function startAppServer() {
       console.log('[APP SERVER] userData path:', app.getPath('userData'))
       console.log('[APP SERVER] Partition storage dir:', storageDir)
       console.log('[APP SERVER] Storage exists:', fs.existsSync(storageDir))
+      console.log('[APP SERVER] distPath:', distPath)
+      console.log('[APP SERVER] index.html exists:', fs.existsSync(path.join(distPath, 'index.html')))
+      resolve()
+    })
+    
+    appServer.on('error', (err) => {
+      console.error('[APP SERVER] Server error:', err)
+      reject(err)
     })
   } catch (e) {
     console.error('[APP SERVER] Failed to start:', e)
+    reject(e)
   }
+  })
 }
 
 function startBridgeServer() {

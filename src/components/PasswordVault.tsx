@@ -286,20 +286,52 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
   const handleSetupPasskey = async () => {
     try {
       setLoading(true)
-      const api = (window as any).electronAPI
-      if (!api || !api.registerPasskey) {
-        alert('Passkey not supported on this device')
+      console.log('Starting passkey setup...')
+      
+      // Check if WebAuthn is supported
+      if (!navigator.credentials || !navigator.credentials.create) {
+        alert('Passkey is not supported on this device or browser')
         return
       }
-      const result = await api.registerPasskey()
-      if (result.success) {
-        store.setPasskeyCredential(result.credentialId, result.publicKey)
-        alert('Passkey setup successful! Next login, you can use your biometric to unlock.')
-      } else {
-        alert('Passkey setup failed: ' + (result.error || 'Unknown error'))
+
+      // Create passkey directly in the renderer
+      const challenge = crypto.getRandomValues(new Uint8Array(32))
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: challenge,
+          rp: { name: 'PassGen' },
+          user: {
+            id: crypto.getRandomValues(new Uint8Array(16)),
+            name: 'passgen-user',
+            displayName: 'PassGen User'
+          },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+          timeout: 60000,
+          attestation: 'none'
+        }
+      })
+
+      if (!credential) {
+        alert('Passkey registration cancelled')
+        return
       }
+
+      if (credential.type !== 'public-key') {
+        alert('Invalid credential type received')
+        return
+      }
+
+      // Convert credential ID to hex string
+      const credentialId = Array.from(new Uint8Array(credential.id as any as ArrayBuffer))
+        .map(b => ('0' + b.toString(16)).slice(-2))
+        .join('')
+
+      console.log('Passkey registered:', credentialId)
+      store.setPasskeyCredential(credentialId, 'passkey-registered')
+      alert('Passkey setup successful! Next login, you can use your biometric to unlock.')
     } catch (e) {
-      alert('Passkey setup error: ' + (e as Error).message)
+      console.error('Passkey setup error:', e)
+      alert('Passkey setup failed: ' + (e as Error).message)
     } finally {
       setLoading(false)
     }

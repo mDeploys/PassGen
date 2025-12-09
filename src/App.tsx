@@ -186,29 +186,50 @@ function App() {
   }
 
   const handlePasskeyUnlock = async () => {
-    const api = (window as any).electronAPI
-    if (!api || !api.verifyPasskey) {
-      alert('Passkey not supported on this device')
-      return
-    }
     try {
-      const result = await api.verifyPasskey()
-      if (result.success) {
-        const cfg = new ConfigStore()
-        const cred = cfg.getPasskeyCredential()
-        if (cred && cred.credentialId === result.id) {
-          // Passkey verified, need to get master password to initialize encryption
-          alert('Passkey verified! Now please enter your master password to unlock the vault.')
-          setMasterPasswordInput('')
-          return
-        } else {
-          alert('Passkey does not match. Please use your master password instead.')
+      // Check if WebAuthn is supported
+      if (!navigator.credentials || !navigator.credentials.get) {
+        alert('Passkey is not supported on this device')
+        return
+      }
+
+      const cfg = new ConfigStore()
+      const cred = cfg.getPasskeyCredential()
+      if (!cred || !cred.credentialId) {
+        alert('No passkey found. Please use your master password.')
+        return
+      }
+
+      // Perform WebAuthn assertion (verify passkey)
+      const challenge = crypto.getRandomValues(new Uint8Array(32))
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge: challenge,
+          timeout: 60000,
+          userVerification: 'preferred'
         }
+      })
+
+      if (!assertion) {
+        alert('Passkey verification cancelled')
+        return
+      }
+
+      // Convert assertion ID to hex and compare with stored credential ID
+      const assertionId = Array.from(new Uint8Array(assertion.id as any as ArrayBuffer))
+        .map(b => ('0' + b.toString(16)).slice(-2))
+        .join('')
+
+      if (assertionId === cred.credentialId) {
+        // Passkey verified, need to get master password to initialize encryption
+        alert('Passkey verified! Now please enter your master password to unlock the vault.')
+        setMasterPasswordInput('')
       } else {
-        alert('Passkey verification failed: ' + (result.error || 'Unknown error'))
+        alert('Passkey does not match the registered credential. Please use your master password instead.')
       }
     } catch (e) {
-      alert('Passkey error: ' + (e as Error).message)
+      console.error('Passkey unlock error:', e)
+      alert('Passkey verification failed: ' + (e as Error).message + '. Please use your master password instead.')
     }
   }
 

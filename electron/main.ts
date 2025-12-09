@@ -422,35 +422,47 @@ ipcMain.handle('passkey:register', async () => {
     // Delegate WebAuthn registration to renderer via JavaScript
     const result = await mainWindow.webContents.executeJavaScript(`
       (async () => {
-        const challenge = crypto.getRandomValues(new Uint8Array(32));
-        const credential = await navigator.credentials.create({
-          publicKey: {
-            challenge: challenge,
-            rp: { name: "PassGen" },
-            user: {
-              id: crypto.getRandomValues(new Uint8Array(16)),
-              name: "passgen-user",
-              displayName: "PassGen User"
-            },
-            pubKeyCredParams: [{ type: "public-key", alg: -7 }],
-            timeout: 60000,
-            attestation: "none"
+        try {
+          const challenge = crypto.getRandomValues(new Uint8Array(32));
+          console.log('Creating passkey credential...');
+          const credential = await navigator.credentials.create({
+            publicKey: {
+              challenge: challenge,
+              rp: { name: "PassGen" },
+              user: {
+                id: crypto.getRandomValues(new Uint8Array(16)),
+                name: "passgen-user",
+                displayName: "PassGen User"
+              },
+              pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+              timeout: 60000,
+              attestation: "none"
+            }
+          });
+          if (!credential) {
+            throw new Error('Passkey registration cancelled or not supported on this device');
           }
-        });
-        if (!credential) throw new Error('Passkey registration cancelled or not supported');
-        if (credential.type !== 'public-key') throw new Error('Invalid credential type');
-        // Just store the credential ID, which is sufficient for verification
-        const credentialId = Array.from(new Uint8Array(credential.id)).map(b => ('0' + b.toString(16)).slice(-2)).join('');
-        return {
-          credentialId: credentialId,
-          // Store a simple marker that we have a passkey registered
-          publicKey: 'passkey-registered'
-        };
+          if (credential.type !== 'public-key') {
+            throw new Error('Invalid credential type: ' + credential.type);
+          }
+          // Just store the credential ID, which is sufficient for verification
+          const credentialId = Array.from(new Uint8Array(credential.id)).map(b => ('0' + b.toString(16)).slice(-2)).join('');
+          console.log('Passkey registered with ID:', credentialId);
+          return {
+            credentialId: credentialId,
+            // Store a simple marker that we have a passkey registered
+            publicKey: 'passkey-registered'
+          };
+        } catch (err) {
+          console.error('Passkey error:', err.message);
+          throw err;
+        }
       })()
     `)
     return { success: true, ...result }
   } catch (e) {
-    return { success: false, error: (e as Error).message || 'Unknown error' }
+    console.error('Passkey registration handler error:', e)
+    return { success: false, error: (e as Error).message || 'Unknown error during passkey registration' }
   }
 })
 

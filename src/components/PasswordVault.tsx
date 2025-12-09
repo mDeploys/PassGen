@@ -288,50 +288,73 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
       setLoading(true)
       console.log('Starting passkey setup...')
       
-      // Check if WebAuthn is supported
+      // Check if WebAuthn is supported and available in secure context
       if (!navigator.credentials || !navigator.credentials.create) {
         alert('Passkey is not supported on this device or browser')
         return
       }
 
-      // Create passkey directly in the renderer
-      const challenge = crypto.getRandomValues(new Uint8Array(32))
-      const credential = await navigator.credentials.create({
-        publicKey: {
-          challenge: challenge,
-          rp: { name: 'PassGen' },
-          user: {
-            id: crypto.getRandomValues(new Uint8Array(16)),
-            name: 'passgen-user',
-            displayName: 'PassGen User'
-          },
-          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-          timeout: 60000,
-          attestation: 'none'
+      // Check if we're in a secure context (HTTPS, localhost, or file://)
+      if (!window.isSecureContext) {
+        alert('Passkey requires a secure context (HTTPS or localhost). This feature is not available in file:// mode.')
+        return
+      }
+
+      try {
+        // Create passkey directly in the renderer
+        const challenge = crypto.getRandomValues(new Uint8Array(32))
+        const credential = await navigator.credentials.create({
+          publicKey: {
+            challenge: challenge,
+            rp: { name: 'PassGen' },
+            user: {
+              id: crypto.getRandomValues(new Uint8Array(16)),
+              name: 'passgen-user',
+              displayName: 'PassGen User'
+            },
+            pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+            timeout: 60000,
+            attestation: 'none'
+          }
+        })
+
+        if (!credential) {
+          alert('Passkey registration cancelled')
+          return
         }
-      })
 
-      if (!credential) {
-        alert('Passkey registration cancelled')
-        return
+        if (credential.type !== 'public-key') {
+          alert('Invalid credential type received')
+          return
+        }
+
+        // Convert credential ID to hex string
+        const credentialId = Array.from(new Uint8Array(credential.id as any as ArrayBuffer))
+          .map(b => ('0' + b.toString(16)).slice(-2))
+          .join('')
+
+        console.log('Passkey registered:', credentialId)
+        store.setPasskeyCredential(credentialId, 'passkey-registered')
+        alert('Passkey setup successful! Next login, you can use your biometric to unlock.')
+      } catch (webauthnError) {
+        const errorMsg = (webauthnError as Error).message
+        console.error('WebAuthn error:', errorMsg)
+        
+        // Provide helpful error message
+        if (errorMsg.includes('HTTPS') || errorMsg.includes('secure')) {
+          alert('Passkey requires a secure connection (HTTPS or localhost). Please upgrade your PassGen installation or use your master password.')
+        } else if (errorMsg.includes('cancel') || errorMsg.includes('dismissed')) {
+          alert('Passkey setup cancelled')
+        } else if (errorMsg.includes('not supported')) {
+          alert('Passkey is not supported on this device. Please use your master password instead.')
+        } else {
+          alert('Passkey setup failed: ' + errorMsg)
+        }
+        throw webauthnError
       }
-
-      if (credential.type !== 'public-key') {
-        alert('Invalid credential type received')
-        return
-      }
-
-      // Convert credential ID to hex string
-      const credentialId = Array.from(new Uint8Array(credential.id as any as ArrayBuffer))
-        .map(b => ('0' + b.toString(16)).slice(-2))
-        .join('')
-
-      console.log('Passkey registered:', credentialId)
-      store.setPasskeyCredential(credentialId, 'passkey-registered')
-      alert('Passkey setup successful! Next login, you can use your biometric to unlock.')
     } catch (e) {
       console.error('Passkey setup error:', e)
-      alert('Passkey setup failed: ' + (e as Error).message)
+      // Error already shown above, don't show duplicate
     } finally {
       setLoading(false)
     }
@@ -371,7 +394,9 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
                 <button onClick={repairVault} disabled={loading}>Repair Vault</button>
               )}
               <button onClick={() => window.dispatchEvent(new Event('open-storage-setup'))}>Change Storage</button>
-              <button onClick={handleSetupPasskey} disabled={loading}>Setup Passkey</button>
+              {window.isSecureContext && (
+                <button onClick={handleSetupPasskey} disabled={loading}>Setup Passkey</button>
+              )}
               {store.isPremium() && (
                 <>
                   <button onClick={handleExport} disabled={loading}>Export Vault Backup</button>

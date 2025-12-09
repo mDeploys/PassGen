@@ -193,6 +193,12 @@ function App() {
         return
       }
 
+      // Check if we're in a secure context
+      if (!window.isSecureContext) {
+        alert('Passkey requires a secure context (HTTPS or localhost). Please use your master password instead.')
+        return
+      }
+
       const cfg = new ConfigStore()
       const cred = cfg.getPasskeyCredential()
       if (!cred || !cred.credentialId) {
@@ -200,36 +206,51 @@ function App() {
         return
       }
 
-      // Perform WebAuthn assertion (verify passkey)
-      const challenge = crypto.getRandomValues(new Uint8Array(32))
-      const assertion = await navigator.credentials.get({
-        publicKey: {
-          challenge: challenge,
-          timeout: 60000,
-          userVerification: 'preferred'
+      try {
+        // Perform WebAuthn assertion (verify passkey)
+        const challenge = crypto.getRandomValues(new Uint8Array(32))
+        const assertion = await navigator.credentials.get({
+          publicKey: {
+            challenge: challenge,
+            timeout: 60000,
+            userVerification: 'preferred'
+          }
+        })
+
+        if (!assertion) {
+          alert('Passkey verification cancelled')
+          return
         }
-      })
 
-      if (!assertion) {
-        alert('Passkey verification cancelled')
-        return
-      }
+        // Convert assertion ID to hex and compare with stored credential ID
+        const assertionId = Array.from(new Uint8Array(assertion.id as any as ArrayBuffer))
+          .map(b => ('0' + b.toString(16)).slice(-2))
+          .join('')
 
-      // Convert assertion ID to hex and compare with stored credential ID
-      const assertionId = Array.from(new Uint8Array(assertion.id as any as ArrayBuffer))
-        .map(b => ('0' + b.toString(16)).slice(-2))
-        .join('')
-
-      if (assertionId === cred.credentialId) {
-        // Passkey verified, need to get master password to initialize encryption
-        alert('Passkey verified! Now please enter your master password to unlock the vault.')
-        setMasterPasswordInput('')
-      } else {
-        alert('Passkey does not match the registered credential. Please use your master password instead.')
+        if (assertionId === cred.credentialId) {
+          // Passkey verified, need to get master password to initialize encryption
+          alert('Passkey verified! Now please enter your master password to unlock the vault.')
+          setMasterPasswordInput('')
+        } else {
+          alert('Passkey does not match the registered credential. Please use your master password instead.')
+        }
+      } catch (webauthnError) {
+        const errorMsg = (webauthnError as Error).message
+        console.error('WebAuthn error:', errorMsg)
+        
+        if (errorMsg.includes('HTTPS') || errorMsg.includes('secure')) {
+          alert('Passkey requires a secure connection. Please use your master password instead.')
+        } else if (errorMsg.includes('cancel') || errorMsg.includes('dismissed')) {
+          alert('Passkey verification cancelled. Please use your master password.')
+        } else if (errorMsg.includes('not supported')) {
+          alert('Passkey is not supported on this device. Please use your master password.')
+        } else {
+          alert('Passkey verification failed: ' + errorMsg + '. Please use your master password.')
+        }
       }
     } catch (e) {
       console.error('Passkey unlock error:', e)
-      alert('Passkey verification failed: ' + (e as Error).message + '. Please use your master password instead.')
+      alert('Passkey verification error: ' + (e as Error).message + '. Please use your master password.')
     }
   }
 
@@ -336,7 +357,7 @@ function App() {
               <button onClick={handleMasterPasswordSubmit} className="auth-btn">
                 {localStorage.getItem('passgen-master-hash') ? 'Unlock Vault' : 'Set Master Password'}
               </button>
-              {localStorage.getItem('passgen-passkey-credential') && (
+              {localStorage.getItem('passgen-passkey-credential') && window.isSecureContext && (
                 <button onClick={handlePasskeyUnlock} className="auth-btn auth-btn-secondary">
                   Unlock with Passkey
                 </button>

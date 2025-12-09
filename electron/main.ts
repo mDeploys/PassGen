@@ -336,6 +336,68 @@ ipcMain.handle('vault:open', async () => {
   }
 })
 
+// Passkey registration and verification handlers
+ipcMain.handle('passkey:register', async () => {
+  try {
+    if (!mainWindow) return { success: false, error: 'Window not available' }
+    // Delegate WebAuthn registration to renderer via JavaScript
+    const result = await mainWindow.webContents.executeJavaScript(`
+      (async () => {
+        const challenge = crypto.getRandomValues(new Uint8Array(32));
+        const credential = await navigator.credentials.create({
+          publicKey: {
+            challenge: challenge,
+            rp: { name: "PassGen" },
+            user: {
+              id: crypto.getRandomValues(new Uint8Array(16)),
+              name: "passgen-user",
+              displayName: "PassGen User"
+            },
+            pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+            timeout: 60000,
+            attestation: "none"
+          }
+        });
+        if (!credential) throw new Error('Passkey registration failed');
+        return {
+          id: Array.from(new Uint8Array(credential.id)).map(b => ('0' + b.toString(16)).slice(-2)).join(''),
+          publicKey: btoa(String.fromCharCode.apply(null, new Uint8Array(credential.response.getPublicKey())))
+        };
+      })()
+    `)
+    return { success: true, ...result }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('passkey:verify', async () => {
+  try {
+    if (!mainWindow) return { success: false, error: 'Window not available' }
+    // Delegate WebAuthn verification to renderer
+    const result = await mainWindow.webContents.executeJavaScript(`
+      (async () => {
+        const challenge = crypto.getRandomValues(new Uint8Array(32));
+        const assertion = await navigator.credentials.get({
+          publicKey: {
+            challenge: challenge,
+            timeout: 60000,
+            userVerification: "preferred"
+          }
+        });
+        if (!assertion) throw new Error('Passkey verification failed');
+        return {
+          id: Array.from(new Uint8Array(assertion.id)).map(b => ('0' + b.toString(16)).slice(-2)).join(''),
+          verified: true
+        };
+      })()
+    `)
+    return { success: true, ...result }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
 // Session token management for extension bridge
 function generateSessionToken(): string {
   const buf = Buffer.alloc(16)

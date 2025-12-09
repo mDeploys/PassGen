@@ -283,6 +283,28 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
     entry.url?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  const handleSetupPasskey = async () => {
+    try {
+      setLoading(true)
+      const api = (window as any).electronAPI
+      if (!api || !api.registerPasskey) {
+        alert('Passkey not supported on this device')
+        return
+      }
+      const result = await api.registerPasskey()
+      if (result.success) {
+        store.setPasskeyCredential(result.id, result.publicKey)
+        alert('Passkey setup successful! Next login, you can use your biometric to unlock.')
+      } else {
+        alert('Passkey setup failed: ' + (result.error || 'Unknown error'))
+      }
+    } catch (e) {
+      alert('Passkey setup error: ' + (e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="password-vault">
       <div className="vault-header">
@@ -317,6 +339,7 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
                 <button onClick={repairVault} disabled={loading}>Repair Vault</button>
               )}
               <button onClick={() => window.dispatchEvent(new Event('open-storage-setup'))}>Change Storage</button>
+              <button onClick={handleSetupPasskey} disabled={loading}>Setup Passkey</button>
               {store.isPremium() && (
                 <>
                   <button onClick={handleExport} disabled={loading}>Export Vault Backup</button>

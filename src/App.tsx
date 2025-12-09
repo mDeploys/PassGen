@@ -182,6 +182,33 @@ function App() {
     setMode('vault')
   }
 
+  const handlePasskeyUnlock = async () => {
+    const api = (window as any).electronAPI
+    if (!api || !api.verifyPasskey) {
+      alert('Passkey not supported on this device')
+      return
+    }
+    try {
+      const result = await api.verifyPasskey()
+      if (result.success) {
+        const cfg = new ConfigStore()
+        const cred = cfg.getPasskeyCredential()
+        if (cred && cred.credentialId === result.id) {
+          // Passkey verified, need to get master password to initialize encryption
+          alert('Passkey verified! Now please enter your master password to unlock the vault.')
+          setMasterPasswordInput('')
+          return
+        } else {
+          alert('Passkey does not match. Please use your master password instead.')
+        }
+      } else {
+        alert('Passkey verification failed: ' + (result.error || 'Unknown error'))
+      }
+    } catch (e) {
+      alert('Passkey error: ' + (e as Error).message)
+    }
+  }
+
   const generatePassword = () => {
     let charset = ''
     if (options.lowercase) charset += 'abcdefghijklmnopqrstuvwxyz'
@@ -285,6 +312,11 @@ function App() {
               <button onClick={handleMasterPasswordSubmit} className="auth-btn">
                 {localStorage.getItem('passgen-master-hash') ? 'Unlock Vault' : 'Set Master Password'}
               </button>
+              {localStorage.getItem('passgen-passkey-credential') && (
+                <button onClick={handlePasskeyUnlock} className="auth-btn auth-btn-secondary">
+                  Unlock with Passkey
+                </button>
+              )}
               <p className="auth-note">
                 This password encrypts/decrypts your stored passwords. Don't forget it!
               </p>

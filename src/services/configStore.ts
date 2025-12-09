@@ -101,9 +101,23 @@ export class ConfigStore {
     localStorage.setItem('passgen-master-hash', hash);
   }
 
+  getPasskeyCredential(): { credentialId: string; publicKey: string } | null {
+    const data = localStorage.getItem('passgen-passkey-credential');
+    return data ? JSON.parse(data) : null;
+  }
+
+  setPasskeyCredential(credentialId: string, publicKey: string): void {
+    localStorage.setItem('passgen-passkey-credential', JSON.stringify({ credentialId, publicKey }));
+  }
+
+  clearPasskeyCredential(): void {
+    localStorage.removeItem('passgen-passkey-credential');
+  }
+
   clear(): void {
     localStorage.removeItem('passgen-storage-config');
     localStorage.removeItem('passgen-master-hash');
+    localStorage.removeItem('passgen-passkey-credential');
     // Remove both legacy and current keys just in case
     localStorage.removeItem('passgen-onboarding-complete');
     localStorage.removeItem('passgen-onboarding-completed');

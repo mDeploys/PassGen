@@ -252,14 +252,81 @@ function createWindow() {
 
   // In development, use the Vite dev server
   const isDev = process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL
-  
+
   if (isDev) {
     const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
     mainWindow.loadURL(devServerUrl)
-    // Don't open dev tools automatically
   } else {
-    // Production: load from dist folder
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    // Production: use local HTTP server to enable WebAuthn (secure context)
+    // This PRESERVES localStorage properly unlike file:// protocol
+    const distPath = path.join(__dirname, '../dist')
+    const fs = require('fs')
+    
+    // Create HTTP server if not already created
+    if (!server) {
+      server = http.createServer((req, res) => {
+        // Parse URL
+        let urlPath = req.url || '/'
+        if (urlPath.startsWith('?')) urlPath = '/'
+        
+        // Default to index.html for root
+        let filePath = urlPath === '/' ? path.join(distPath, 'index.html') : path.join(distPath, urlPath)
+        
+        // Security: prevent directory traversal
+        const realPath = require('path').resolve(filePath)
+        if (!realPath.startsWith(require('path').resolve(distPath))) {
+          res.writeHead(403, { 'Content-Type': 'text/plain' })
+          res.end('403 Forbidden')
+          return
+        }
+        
+        // Try to serve the file
+        fs.stat(filePath, (err: any, stats: any) => {
+          if (err || !stats.isFile()) {
+            // File not found, serve index.html for SPA routing
+            fs.readFile(path.join(distPath, 'index.html'), (err: any, content: any) => {
+              if (!err) {
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+                res.end(content)
+              } else {
+                res.writeHead(404, { 'Content-Type': 'text/plain' })
+                res.end('404 Not Found')
+              }
+            })
+            return
+          }
+          
+          // File exists, serve it with appropriate MIME type
+          const ext = path.extname(filePath).toLowerCase()
+          const mimeTypes: {[key: string]: string} = {
+            '.html': 'text/html; charset=utf-8',
+            '.js': 'application/javascript; charset=utf-8',
+            '.css': 'text/css; charset=utf-8',
+            '.json': 'application/json',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.svg': 'image/svg+xml',
+            '.ico': 'image/x-icon',
+            '.woff': 'font/woff',
+            '.woff2': 'font/woff2',
+            '.ttf': 'font/ttf'
+          }
+          
+          const contentType = mimeTypes[ext] || 'application/octet-stream'
+          res.writeHead(200, { 'Content-Type': contentType })
+          fs.createReadStream(filePath).pipe(res)
+        })
+      })
+      
+      // Listen on a high port number to avoid conflicts
+      server.listen(27649, '127.0.0.1', () => {
+        console.log('Local server running on http://127.0.0.1:27649')
+        if (mainWindow) mainWindow.loadURL('http://127.0.0.1:27649')
+      })
+    } else {
+      mainWindow.loadURL('http://127.0.0.1:27649')
+    }
   }
 
   mainWindow.on('closed', () => {

@@ -92,6 +92,37 @@
   color: #667eea;
 }
 
+.upgrade-inline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: linear-gradient(90deg, #eef2ff 0%, #ffffff 100%);
+  border: 1px solid #e0e7ff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 0 14px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.08);
+  color: #334155;
+  font-weight: 600;
+}
+
+.upgrade-inline-btn {
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #667eea, #22c1c3);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px rgba(102, 126, 234, 0.25);
+}
+
+.upgrade-inline-btn:hover {
+  transform: translateY(-1px);
+}
+
 /* Auth Screen */
 .auth-screen {
   max-width: 450px;

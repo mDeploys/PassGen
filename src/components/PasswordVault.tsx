@@ -26,6 +26,8 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [sessionToken, setSessionToken] = useState<string>('')
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
+  const [copyMessage, setCopyMessage] = useState('')
+  const [copyMessageType, setCopyMessageType] = useState<'ok' | 'error' | ''>('')
   const store = new ConfigStore()
 
   useEffect(() => {
@@ -85,6 +87,15 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!copyMessage) return
+    const t = setTimeout(() => {
+      setCopyMessage('')
+      setCopyMessageType('')
+    }, 1800)
+    return () => clearTimeout(t)
+  }, [copyMessage])
 
   const repairVault = async () => {
     if (!confirm('Repair will remove unreadable items and migrate any plaintext records to encrypted form. Continue?')) return
@@ -269,10 +280,12 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
   const copyToClipboard = async (text: string) => {
     try {
       const ok = await copyText(text)
-      alert(ok ? 'Copied to clipboard!' : 'Failed to copy')
+      setCopyMessage(ok ? 'Copied to clipboard' : 'Failed to copy')
+      setCopyMessageType(ok ? 'ok' : 'error')
     } catch (err) {
       console.error('Copy failed:', err)
-      alert('Failed to copy')
+      setCopyMessage('Failed to copy')
+      setCopyMessageType('error')
     }
   }
 
@@ -427,6 +440,12 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
           className="search-input"
         />
       </div>
+
+      {copyMessage && (
+        <div className={`copy-toast ${copyMessageType === 'ok' ? 'copy-toast--ok' : 'copy-toast--error'}`}>
+          {copyMessage}
+        </div>
+      )}
 
       {showAddForm && (
         <div className="add-form">

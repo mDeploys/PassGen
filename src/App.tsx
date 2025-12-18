@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import './App.css'
 import { copyText } from './services/clipboard'
 import SplashScreen from './components/SplashScreen'
@@ -46,6 +46,8 @@ function App() {
   const [showPassword, setShowPassword] = useState(false)
   const [passwordHint, setPasswordHint] = useState('')
   const [passwordHintInput, setPasswordHintInput] = useState('')
+  const configStore = useMemo(() => new ConfigStore(), [])
+  const [isPremium, setIsPremium] = useState(configStore.isPremium())
 
   useEffect(() => {
     const openUpgrade = () => setShowUpgrade(true)
@@ -60,6 +62,12 @@ function App() {
       window.removeEventListener('open-storage-setup', openStorageSetup as EventListener)
     }
   }, [])
+
+  useEffect(() => {
+    const handlePremiumChange = () => setIsPremium(configStore.isPremium())
+    window.addEventListener('premium-changed', handlePremiumChange)
+    return () => window.removeEventListener('premium-changed', handlePremiumChange)
+  }, [configStore])
 
   // Check if user has completed onboarding before
   // NOTE: All user data (premium status, passwords, master hash, passkey) is stored in localStorage
@@ -422,6 +430,12 @@ function App() {
                 🔧 Generator
               </button>
             </div>
+            {!isPremium && (
+              <div className="upgrade-inline-banner">
+                <span>Free plan: 4 passwords. Upgrade to unlock unlimited entries and sync.</span>
+                <button className="upgrade-inline-btn" onClick={() => setShowUpgrade(true)}>⭐ Upgrade</button>
+              </div>
+            )}
             <PasswordVault storageManager={storageManager} onGenerateNew={switchToGenerator} />
           </>
         )}
@@ -442,6 +456,12 @@ function App() {
                 🔧 Generator
               </button>
             </div>
+            {!isPremium && (
+              <div className="upgrade-inline-banner">
+                <span>Free plan: 4 passwords. Upgrade to unlock unlimited entries and sync.</span>
+                <button className="upgrade-inline-btn" onClick={() => setShowUpgrade(true)}>⭐ Upgrade</button>
+              </div>
+            )}
             
             <h1>🔐 PassGen</h1>
             <p className="subtitle">Generate Secure Passwords</p>

@@ -395,42 +395,60 @@ app.on('window-all-closed', () => {
 
 // Handle payment activation email request
 ipcMain.handle('payment:requestActivation', async (_event, payload: { email: string; requestId: string }) => {
-  // Safe default so end-users can request activation via mailto without any env vars
-  const defaultSeller = 'git@mdeploy.dev'
-  const seller = process.env.SELLER_EMAIL || defaultSeller
-  const smtpUser = process.env.ZOHO_USER || ''
-  const smtpPass = process.env.ZOHO_PASS || ''
-  const smtpHost = process.env.ZOHO_HOST || 'smtp.zoho.com'
-  const smtpPort = Number(process.env.ZOHO_PORT || 465)
-  // If port is 587 use STARTTLS (secure=false), if 465 use SSL (secure=true), otherwise use env toggle
-  const smtpSecure = smtpPort === 465 ? true : (smtpPort === 587 ? false : String(process.env.ZOHO_SECURE || 'true') === 'true')
+  const adminEmail = 'admin@mdeploy.dev'
+  const resendApiKey = process.env.RESEND_API_KEY || ''
 
   const subject = `PassGen Premium Activation Request – ${payload.requestId}`
-  const body = `A user clicked "I've paid" in PassGen\n\nInstall/Request ID: ${payload.requestId}\nUser Email: ${payload.email || '(not provided)'}\nPlan: Premium $3.99/mo\nTime: ${new Date().toISOString()}\n\nPlease verify payment on PayPal and send activation code.`
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #333;">PassGen Premium Activation Request</h2>
+      <p>A user has requested activation after payment:</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <tr style="background: #f5f5f5;">
+          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Install/Request ID:</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${payload.requestId}</td>
+        </tr>
+        <tr>
+          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">User Email:</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${payload.email || '(not provided)'}</td>
+        </tr>
+        <tr style="background: #f5f5f5;">
+          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Plan:</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">Premium $15 / 6 months</td>
+        </tr>
+        <tr>
+          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Time:</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${new Date().toISOString()}</td>
+        </tr>
+      </table>
+      <p style="color: #666;">Please verify payment on PayPal or crypto wallet and send activation code to the user.</p>
+    </div>
+  `
+  const textBody = `PassGen Premium Activation Request\n\nInstall/Request ID: ${payload.requestId}\nUser Email: ${payload.email || '(not provided)'}\nPlan: Premium $15 / 6 months\nTime: ${new Date().toISOString()}\n\nPlease verify payment and send activation code.`
 
-  // Try SMTP via nodemailer, fallback to mailto if not configured or fails
+  // Try Resend API, fallback to mailto if not configured
   try {
-    if (seller && smtpUser && smtpPass) {
-      const nodemailerMod = await import('nodemailer')
-      const nodemailer = (nodemailerMod as any).default || (nodemailerMod as any)
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpSecure,
-        auth: { user: smtpUser, pass: smtpPass }
+    if (resendApiKey) {
+      const { Resend } = await import('resend')
+      const resend = new Resend(resendApiKey)
+      
+      await resend.emails.send({
+        from: 'PassGen <onboarding@resend.dev>',
+        to: [adminEmail],
+        subject: subject,
+        html: htmlBody,
+        text: textBody,
+        reply_to: payload.email || undefined
       })
-      await transporter.verify().catch(()=>{})
-      await transporter.sendMail({ from: seller || smtpUser, to: seller, subject, text: body })
+      
       return { success: true }
     }
-    throw new Error('SMTP not configured')
+    throw new Error('Resend API key not configured')
   } catch (err) {
-    if (seller) {
-      const mailto = `mailto:${encodeURIComponent(seller)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-      shell.openExternal(mailto)
-      return { success: false, error: 'SMTP not configured; opened mail client.' }
-    }
-    return { success: false, error: 'Seller email not configured' }
+    // Fallback to mailto link
+    const mailto = `mailto:${encodeURIComponent(adminEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(textBody)}`
+    shell.openExternal(mailto)
+    return { success: false, error: 'Email service not configured; opened mail client.' }
   }
 })
 

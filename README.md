@@ -33,7 +33,43 @@ A secure and user-friendly desktop application for generating strong passwords a
   - Cloud sync (Google Drive, AWS S3, DigitalOcean Spaces)
   - Automatic backups
   - Priority support
+## Activation Dashboard
 
+For developers/sellers managing premium activations:
+
+### Setup
+1. Install dependencies: `npm install`
+2. Set up Supabase database using the schema in `supabase-schema.sql`
+3. Configure environment variables in `.env`
+
+### Running the Dashboard
+```bash
+npm run dashboard
+```
+Then open http://localhost:3001 in your browser.
+
+**Note:** Make sure you have express and resend installed:
+```bash
+npm install express resend
+```
+
+### Features
+- 📊 View activation request statistics
+- 📋 Manage pending activation requests
+- ✅ Generate and send activation codes
+- 📧 Automated email notifications
+- 🔍 Track payment methods and revenue
+
+### Database Schema
+The dashboard uses Supabase with the following tables:
+- `activation_requests` - Stores user activation requests
+- `dashboard_stats` - Aggregated statistics view
+
+### Security
+- 🛡️ All activation codes are cryptographically generated
+- 🔐 Uses HMAC-SHA256 with seller secret
+- 📧 Emails sent via Resend API
+- 🚫 No user data stored permanently
 ### Security
 - 🛡️ All passwords encrypted with AES-256
 - 🔑 Your master password never leaves your device

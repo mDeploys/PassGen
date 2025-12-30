@@ -1,6 +1,6 @@
 # Resend Email Service Setup Guide
 
-PassGen now uses [Resend](https://resend.com) for sending activation request emails to `admin@mdeploy.dev` when users click "Request Activation" after payment.
+PassGen now uses [Resend](https://resend.com) for sending activation request emails to `activation@mdeploy.dev` when users click "Request Activation" after payment.
 
 ## Quick Setup
 
@@ -29,7 +29,7 @@ For production, verify your domain in Resend to avoid spam filters:
 3. Follow the DNS configuration steps
 4. Update the `from` field in `electron/main.ts` to use your verified domain:
    ```typescript
-   from: 'PassGen <noreply@yourdomain.com>',
+   from: 'PassGen <activation@mdeploy.dev>',
    ```
 
 ## How It Works
@@ -39,7 +39,7 @@ When a user:
 2. Fills in their email in the Upgrade modal
 3. Clicks "Request Activation"
 
-The app sends a formatted email to `admin@mdeploy.dev` with:
+The app sends a formatted email to `activation@mdeploy.dev` with:
 - Install/Request ID
 - User's email
 - Payment plan ($15 / 6 months)
@@ -60,26 +60,30 @@ The email is sent with both HTML and plain text versions:
 
 If `RESEND_API_KEY` is not set:
 - Opens the user's default email client (mailto: link)
-- Pre-fills the email to `admin@mdeploy.dev`
+- Pre-fills the email to `activation@mdeploy.dev`
 - Includes all activation request details
 
 This ensures users can always request activation even without the API key configured.
 
-## Testing
+## Activation Dashboard
 
-### Development Mode
+Once emails are being sent, you can manage activations using the built-in dashboard:
 
-Test the activation flow:
+### Setup Dashboard
+1. Install additional dependencies: `npm install express resend`
+2. Run the dashboard: `npm run dashboard` or `start-dashboard.bat`
+3. Open http://localhost:3001 in your browser
 
-1. Start the app: `npm run electron:dev`
-2. Click "Upgrade to Premium"
-3. Enter a test email
-4. Click "Request Activation"
-5. Check if the email was sent (or mailto: client opened)
+### Dashboard Features
+- 📊 View real-time statistics (total requests, pending, activated, revenue)
+- 📋 Manage activation requests with one-click activation
+- ✅ Generate activation codes automatically
+- 📧 Send activation emails to users
+- 🔍 Track payment methods and user details
+- 💰 Monitor revenue from premium activations
 
-### Production Build
-
-After building (`npm run build`), the app will use the API key from the `.env` file if present.
+### Database Setup
+The dashboard requires Supabase. Run the SQL schema from `supabase-schema.sql` in your Supabase dashboard to create the necessary tables.
 
 ## Pricing
 

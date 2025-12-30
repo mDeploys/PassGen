@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface PaymentAPI {
-	requestActivation: (payload: { email: string; requestId: string }) => Promise<{ success: boolean; error?: string }>
+	requestActivation: (payload: { email: string; requestId: string; paymentMethod?: 'paypal' | 'crypto' }) => Promise<{ success: boolean; error?: string }>
 }
 
 interface ClipboardAPI {

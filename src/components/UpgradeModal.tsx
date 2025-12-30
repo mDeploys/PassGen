@@ -25,6 +25,7 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
   }, [open])
 
   const [userEmail, setUserEmail] = useState(store.getUserEmail())
+  const [paymentMethod, setPaymentMethod] = useState<'paypal' | 'crypto'>('paypal')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
 
@@ -36,7 +37,7 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
       store.setUserEmail(userEmail)
     }
     try {
-      const res = await window.electron.payment.requestActivation({ email: userEmail, requestId })
+      const res = await window.electron.payment.requestActivation({ email: userEmail, requestId, paymentMethod })
       if (res.success) {
         setSent(true)
         alert('Activation request sent. You will be activated after verification.')
@@ -200,6 +201,29 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
               <div className="input-with-button">
                 <input type="text" value={installId} readOnly />
                 <button className="ghost-btn" onClick={copyInstallId}>Copy</button>
+              </div>
+            </div>
+            <div className="email-capture">
+              <label>Payment Method</label>
+              <div className="payment-method-selector">
+                <label className={`method-option ${paymentMethod === 'paypal' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    value="paypal"
+                    checked={paymentMethod === 'paypal'}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'paypal')}
+                  />
+                  <span>PayPal</span>
+                </label>
+                <label className={`method-option ${paymentMethod === 'crypto' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    value="crypto"
+                    checked={paymentMethod === 'crypto'}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'crypto')}
+                  />
+                  <span>Crypto (USDT)</span>
+                </label>
               </div>
             </div>
             <div className="email-capture">

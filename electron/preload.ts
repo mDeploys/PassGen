@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, clipboard } from 'electron'
 
 contextBridge.exposeInMainWorld('electron', {
   payment: {
-    requestActivation: (payload: { email: string; requestId: string }) => ipcRenderer.invoke('payment:requestActivation', payload)
+    requestActivation: (payload: { email: string; requestId: string; paymentMethod?: 'paypal' | 'crypto' }) => ipcRenderer.invoke('payment:requestActivation', payload)
   },
   clipboard: {
     writeText: async (text: string) => {
@@ -51,7 +51,7 @@ declare global {
   interface Window {
     electron: {
       payment: {
-        requestActivation: (payload: { email: string; requestId: string }) => Promise<{ success: boolean; error?: string }>
+        requestActivation: (payload: { email: string; requestId: string; paymentMethod?: 'paypal' | 'crypto' }) => Promise<{ success: boolean; error?: string }>
       }
       clipboard: {
         writeText: (text: string) => Promise<boolean>

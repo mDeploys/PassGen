@@ -403,8 +403,8 @@ app.on('window-all-closed', () => {
 })
 
 // Handle payment activation email request
-ipcMain.handle('payment:requestActivation', async (_event, payload: { email: string; requestId: string }) => {
-  const adminEmail = 'admin@mdeploy.dev'
+ipcMain.handle('payment:requestActivation', async (_event, payload: { email: string; requestId: string; paymentMethod?: 'paypal' | 'crypto' }) => {
+  const adminEmail = 'activation@mdeploy.dev'
   const resendApiKey = process.env.RESEND_API_KEY || ''
 
   const subject = `PassGen Premium Activation Request – ${payload.requestId}`
@@ -422,21 +422,52 @@ ipcMain.handle('payment:requestActivation', async (_event, payload: { email: str
           <td style="padding: 10px; border: 1px solid #ddd;">${payload.email || '(not provided)'}</td>
         </tr>
         <tr style="background: #f5f5f5;">
+          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Payment Method:</td>
+          <td style="padding: 10px; border: 1px solid #ddd;">${payload.paymentMethod || 'paypal'}</td>
+        </tr>
+        <tr>
           <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Plan:</td>
           <td style="padding: 10px; border: 1px solid #ddd;">Premium $15 / 6 months</td>
         </tr>
-        <tr>
+        <tr style="background: #f5f5f5;">
           <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Time:</td>
           <td style="padding: 10px; border: 1px solid #ddd;">${new Date().toISOString()}</td>
         </tr>
       </table>
       <p style="color: #666;">Please verify payment on PayPal or crypto wallet and send activation code to the user.</p>
+      <p style="color: #666;"><a href="https://mdeploy.dev/dashboard">View in Dashboard</a></p>
     </div>
   `
-  const textBody = `PassGen Premium Activation Request\n\nInstall/Request ID: ${payload.requestId}\nUser Email: ${payload.email || '(not provided)'}\nPlan: Premium $15 / 6 months\nTime: ${new Date().toISOString()}\n\nPlease verify payment and send activation code.`
+  const textBody = `PassGen Premium Activation Request\n\nInstall/Request ID: ${payload.requestId}\nUser Email: ${payload.email || '(not provided)'}\nPayment Method: ${payload.paymentMethod || 'paypal'}\nPlan: Premium $15 / 6 months\nTime: ${new Date().toISOString()}\n\nPlease verify payment and send activation code.\nView in Dashboard: https://mdeploy.dev/dashboard`
 
-  // Try Resend API; return a clear error if not configured or fails.
   try {
+    // Save to Supabase first
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ylzxeyqlqvziwnradcmy.supabase.co',
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsenhleXFscXZ6aXducmFkY215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NjIzMTAsImV4cCI6MjA4MTAzODMxMH0.e-0bhGJnlEC_hJ-DUiICu9KoZ0753bSp4QaIuamNG7o'
+      )
+
+      const { error } = await supabase
+        .from('activation_requests')
+        .insert({
+          install_id: payload.requestId,
+          user_email: payload.email,
+          payment_method: payload.paymentMethod || 'paypal',
+          payment_amount: 15.00,
+          payment_currency: 'USD',
+          status: 'pending'
+        })
+
+      if (error) {
+        console.error('[PAYMENT] Failed to save to Supabase:', error)
+      }
+    } catch (dbError) {
+      console.error('[PAYMENT] Supabase integration error:', dbError)
+    }
+
+    // Send email
     if (!resendApiKey) {
       return { success: false, error: 'Email service is not configured. Please contact support.' }
     }
@@ -444,7 +475,7 @@ ipcMain.handle('payment:requestActivation', async (_event, payload: { email: str
     const resend = new Resend(resendApiKey)
 
     await resend.emails.send({
-      from: 'PassGen <onboarding@resend.dev>',
+      from: 'PassGen <activation@mdeploy.dev>',
       to: [adminEmail],
       subject: subject,
       html: htmlBody,

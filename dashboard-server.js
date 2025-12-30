@@ -3,9 +3,15 @@
 const express = require('express')
 const path = require('path')
 const { createClient } = require('@supabase/supabase-js')
+const axios = require('axios')
 
 const app = express()
 const PORT = process.env.PORT || 3001
+
+// Discord configuration
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
+const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID
 
 // Supabase client
 const supabase = createClient(
@@ -13,9 +19,26 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsenhleXFscXZ6aXducmFkY215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NjIzMTAsImV4cCI6MjA4MTAzODMxMH0.e-0bhGJnlEC_hJ-DUiICu9KoZ0753bSp4QaIuamNG7o'
 )
 
+// Discord webhook function
+async function sendDiscordNotification(embed) {
+  if (!DISCORD_WEBHOOK_URL) {
+    console.log('Discord webhook not configured, skipping notification')
+    return
+  }
+
+  try {
+    await axios.post(DISCORD_WEBHOOK_URL, {
+      embeds: [embed]
+    })
+    console.log('Discord notification sent')
+  } catch (error) {
+    console.error('Failed to send Discord notification:', error.message)
+  }
+}
+
 // Middleware
 app.use(express.json())
-app.use(express.static(path.join(__dirname, 'public')))
+// app.use(express.static(path.join(__dirname, 'public')))
 
 // API Routes
 app.get('/api/requests', async (req, res) => {
@@ -42,6 +65,66 @@ app.get('/api/stats', async (req, res) => {
     if (error) throw error
     res.json(data)
   } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// POST endpoint for new activation requests (called from Electron app)
+app.post('/api/requests', async (req, res) => {
+  try {
+    const { install_id, user_email, payment_method, payment_amount } = req.body
+
+    const { data, error } = await supabase
+      .from('activation_requests')
+      .insert({
+        install_id,
+        user_email,
+        payment_method: payment_method || 'paypal',
+        payment_amount: payment_amount || 15.00,
+        payment_currency: 'USD',
+        status: 'pending'
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Send Discord notification
+    const embed = {
+      title: '🎉 New PassGen Activation Request!',
+      color: 0x3b82f6,
+      fields: [
+        {
+          name: '👤 User Email',
+          value: user_email,
+          inline: true
+        },
+        {
+          name: '🆔 Install ID',
+          value: `\`${install_id}\``,
+          inline: true
+        },
+        {
+          name: '💰 Payment',
+          value: `${payment_method} - $${payment_amount}`,
+          inline: true
+        },
+        {
+          name: '📅 Time',
+          value: new Date().toLocaleString(),
+          inline: false
+        }
+      ],
+      footer: {
+        text: 'PassGen Activation Dashboard'
+      }
+    }
+
+    await sendDiscordNotification(embed)
+
+    res.json(data)
+  } catch (error) {
+    console.error('Error creating activation request:', error)
     res.status(500).json({ error: error.message })
   }
 })
@@ -133,4 +216,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`PassGen Dashboard server running on http://localhost:${PORT}`)
   console.log(`Dashboard available at: http://localhost:${PORT}`)
+}).on('error', (err) => {
+  console.error('Server failed to start:', err)
+  process.exit(1)
 })

@@ -441,30 +441,56 @@ ipcMain.handle('payment:requestActivation', async (_event, payload: { email: str
   const textBody = `PassGen Premium Activation Request\n\nInstall/Request ID: ${payload.requestId}\nUser Email: ${payload.email || '(not provided)'}\nPayment Method: ${payload.paymentMethod || 'paypal'}\nPlan: Premium $15 / 6 months\nTime: ${new Date().toISOString()}\n\nPlease verify payment and send activation code.\nView in Dashboard: https://mdeploy.dev/dashboard`
 
   try {
-    // Save to Supabase first
+    // Save to Supabase Edge Function (which will save to Supabase and send Discord notification)
     try {
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ylzxeyqlqvziwnradcmy.supabase.co',
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsenhleXFscXZ6aXducmFkY215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NjIzMTAsImV4cCI6MjA4MTAzODMxMH0.e-0bhGJnlEC_hJ-DUiICu9KoZ0753bSp4QaIuamNG7o'
-      )
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ylzxeyqlqvziwnradcmy.supabase.co'
 
-      const { error } = await supabase
-        .from('activation_requests')
-        .insert({
+      const response = await fetch(`${supabaseUrl}/functions/v1/activation-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsenhleXFscXZ6aXducmFkY215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NjIzMTAsImV4cCI6MjA4MTAzODMxMH0.e-0bhGJnlEC_hJ-DUiICu9KoZ0753bSp4QaIuamNG7o'}`
+        },
+        body: JSON.stringify({
           install_id: payload.requestId,
           user_email: payload.email,
           payment_method: payload.paymentMethod || 'paypal',
-          payment_amount: 15.00,
-          payment_currency: 'USD',
-          status: 'pending'
+          payment_amount: 15.00
         })
+      })
 
-      if (error) {
-        console.error('[PAYMENT] Failed to save to Supabase:', error)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`)
       }
-    } catch (dbError) {
-      console.error('[PAYMENT] Supabase integration error:', dbError)
+
+      console.log('[PAYMENT] Activation request saved via Edge Function')
+    } catch (apiError) {
+      console.error('[PAYMENT] Edge Function error:', apiError)
+      // Fallback to direct Supabase insertion if Edge Function fails
+      try {
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ylzxeyqlqvziwnradcmy.supabase.co',
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsenhleXFscXZ6aXducmFkY215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NjIzMTAsImV4cCI6MjA4MTAzODMxMH0.e-0bhGJnlEC_hJ-DUiICu9KoZ0753bSp4QaIuamNG7o'
+        )
+
+        const { error } = await supabase
+          .from('activation_requests')
+          .insert({
+            install_id: payload.requestId,
+            user_email: payload.email,
+            payment_method: payload.paymentMethod || 'paypal',
+            payment_amount: 15.00,
+            payment_currency: 'USD',
+            status: 'pending'
+          })
+
+        if (error) {
+          console.error('[PAYMENT] Fallback Supabase save failed:', error)
+        }
+      } catch (fallbackError) {
+        console.error('[PAYMENT] Fallback save error:', fallbackError)
+      }
     }
 
     // Send email

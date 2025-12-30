@@ -10,7 +10,8 @@
     "electron:dev": "tsc && concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "tsc && vite build && node scripts/sync-icons.js && electron-builder",
     "gen:activation": "node scripts/generate-activation.js",
-    "dashboard": "node dashboard-server.js"
+    "dashboard": "node dashboard-server.js",
+    "discord-bot": "node discord-bot.js"
   },
   "keywords": [
     "password",

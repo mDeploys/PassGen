@@ -13,11 +13,20 @@ const client = new Client({
   ]
 })
 
-// Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-)
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Missing Supabase credentials. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.')
+  process.exit(1)
+}
+
+// Supabase client
+const supabase = createClient(supabaseUrl, supabaseKey)
 
 // Bot ready event
 client.once('ready', async () => {
@@ -132,20 +141,36 @@ async function handlePendingCommand(interaction) {
 async function handleActivateCommand(interaction) {
   await interaction.deferReply({ ephemeral: true })
 
-  const installId = interaction.options.getString('install_id')
+  const installId = (interaction.options.getString('install_id') || '').trim()
   const customCode = interaction.options.getString('activation_code')
 
   try {
-    // Find the request
+    if (!installId) {
+      await interaction.editReply('❌ Install ID is required.')
+      return
+    }
+
+    // Find the latest request for this install ID
     const { data: request, error: findError } = await supabase
       .from('activation_requests')
       .select('*')
       .eq('install_id', installId)
-      .eq('status', 'pending')
-      .single()
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-    if (findError || !request) {
-      await interaction.editReply(`❌ No pending request found for install ID: \`${installId}\``)
+    if (findError) {
+      throw new Error(`Lookup failed: ${findError.message}`)
+    }
+
+    if (!request) {
+      await interaction.editReply(`❌ No request found for install ID: \`${installId}\``)
+      return
+    }
+
+    if (request.status !== 'pending') {
+      const codeHint = request.activation_code ? ` Activation code: \`${request.activation_code}\`` : ''
+      await interaction.editReply(`⚠️ Request status is \`${request.status}\`. ${codeHint}`)
       return
     }
 
@@ -163,7 +188,9 @@ async function handleActivateCommand(interaction) {
       })
       .eq('id', request.id)
 
-    if (updateError) throw updateError
+    if (updateError) {
+      throw new Error(`Update failed: ${updateError.message}`)
+    }
 
     // Send success embed
     const embed = new EmbedBuilder()
@@ -190,7 +217,8 @@ async function handleActivateCommand(interaction) {
 
   } catch (error) {
     console.error('Activate command error:', error)
-    await interaction.editReply('❌ Failed to activate license.')
+    const message = error?.message ? `❌ Failed to activate license. ${error.message}` : '❌ Failed to activate license.'
+    await interaction.editReply(message)
   }
 }
 

@@ -28,6 +28,10 @@ if (!supabaseUrl || !supabaseKey) {
 // Supabase client
 const supabase = createClient(supabaseUrl, supabaseKey)
 
+const RESEND_API_KEY = process.env.RESEND_API_KEY
+const FROM_EMAIL = process.env.FROM_EMAIL || 'PassGen <activation@mdeploy.dev>'
+const REPLY_TO_EMAIL = process.env.REPLY_TO_EMAIL || 'activation@mdeploy.dev'
+
 // Bot ready event
 client.once('ready', async () => {
   console.log(`🤖 PassGen Bot is online as ${client.user.tag}!`)
@@ -205,6 +209,17 @@ async function handleActivateCommand(interaction) {
 
     await interaction.editReply({ embeds: [embed] })
 
+    // Email activation code to the user (best-effort)
+    const emailResult = await sendActivationEmail(request.user_email, activationCode, installId)
+    if (!emailResult.ok && !emailResult.skipped) {
+      await interaction.followUp({
+        content: `⚠️ Activation email failed: ${emailResult.error || 'Unknown error'}`,
+        ephemeral: true
+      })
+    } else if (emailResult.ok) {
+      await interaction.followUp({ content: '✅ Activation code emailed to the user.', ephemeral: true })
+    }
+
     // Send public notification
     const publicEmbed = new EmbedBuilder()
       .setTitle('🎉 License Activated!')
@@ -218,6 +233,46 @@ async function handleActivateCommand(interaction) {
     console.error('Activate command error:', error)
     const message = error?.message ? `❌ Failed to activate license. ${error.message}` : '❌ Failed to activate license.'
     await interaction.editReply(message)
+  }
+}
+
+async function sendActivationEmail(email, code, installId) {
+  if (!RESEND_API_KEY) {
+    return { ok: false, skipped: true, error: 'RESEND_API_KEY not set' }
+  }
+
+  try {
+    const { Resend } = require('resend')
+    const resend = new Resend(RESEND_API_KEY)
+    const htmlBody = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">PassGen Premium Activated! 🎉</h2>
+        <p>Your premium subscription has been activated successfully.</p>
+        <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="margin: 0 0 10px; color: #0369a1;">Your Activation Code:</h3>
+          <div style="font-size: 24px; font-weight: bold; color: #0284c7; letter-spacing: 2px;">${code}</div>
+        </div>
+        <p><strong>Install ID:</strong> ${installId}</p>
+        <p><strong>Instructions:</strong></p>
+        <ol>
+          <li>Open your PassGen app</li>
+          <li>Go to Upgrade → Enter this code: <code>${code}</code></li>
+          <li>Click "Activate" to unlock premium features</li>
+        </ol>
+        <p>Enjoy unlimited passwords and cloud sync for the next 6 months!</p>
+      </div>
+    `
+
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [email],
+      subject: 'Your PassGen Premium Activation Code',
+      html: htmlBody,
+      reply_to: REPLY_TO_EMAIL
+    })
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'Email send failed' }
   }
 }
 

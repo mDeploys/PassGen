@@ -236,6 +236,7 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
                 value={userEmail}
                 onChange={(e)=>setUserEmail(e.target.value)}
                 className="ltr-input"
+                autoFocus
               />
             </div>
             <div className="email-capture">

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Simple dashboard server for PassGen activation management
+require('dotenv').config()
 const express = require('express')
 const path = require('path')
 const { createClient } = require('@supabase/supabase-js')

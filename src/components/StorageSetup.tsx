@@ -342,7 +342,14 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                   <div className="form-group">
                     <label>{t('Account')}</label>
                     <div className="inline-row">
-                      <input type="text" value={googleEmail || t('Not connected')} readOnly className="ltr-input" />
+                      <input
+                        type="text"
+                        value={googleEmail || t('Not connected')}
+                        readOnly
+                        aria-readonly="true"
+                        className={`ltr-input ${googleConnected ? '' : 'readonly-input'}`}
+                        title={googleConnected ? googleEmail : t('Click Connect to link your account')}
+                      />
                       {googleConnected ? (
                         <button type="button" className="secondary-btn" onClick={handleGoogleDisconnect} disabled={googleBusy}>
                           {t('Disconnect')}
@@ -353,6 +360,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                         </button>
                       )}
                     </div>
+                    <p className="help-text subtle">{t('This field is read-only. Use Connect to link your account.')}</p>
                   </div>
                   <p className="help-text">{t('Google Drive stores only encrypted vault snapshots. No plaintext ever leaves this device.')}</p>
                 </>

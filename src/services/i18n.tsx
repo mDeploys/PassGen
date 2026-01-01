@@ -146,6 +146,8 @@ const translations: Record<Language, Record<string, string>> = {
     'Keep last N versions': 'الاحتفاظ بآخر N إصدارات',
     'Account': 'الحساب',
     'Not connected': 'غير متصل',
+    'Click Connect to link your account': 'اضغط اتصال لربط حسابك',
+    'This field is read-only. Use Connect to link your account.': 'هذا الحقل للقراءة فقط. استخدم اتصال لربط حسابك.',
     'Disconnect': 'قطع الاتصال',
     'Connect': 'اتصال',
     'Connecting...': 'جارٍ الاتصال...',

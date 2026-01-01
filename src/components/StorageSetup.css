@@ -221,6 +221,12 @@
   flex: 1;
 }
 
+.readonly-input {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: default;
+}
+
 .secondary-btn {
   padding: 7px 10px;
   border-radius: 6px;
@@ -266,6 +272,11 @@
   margin-top: 8px;
   font-size: 0.75rem;
   color: #666;
+}
+
+.help-text.subtle {
+  margin-top: 4px;
+  color: #94a3b8;
 }
 
 .help-text a {

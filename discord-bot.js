@@ -74,23 +74,28 @@ client.once('ready', async () => {
 
 // Handle slash commands
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand()) return
-
-  const { commandName } = interaction
-
   try {
-    switch (commandName) {
-      case 'pending':
-        await handlePendingCommand(interaction)
-        break
+    if (interaction.isChatInputCommand()) {
+      const { commandName } = interaction
+      switch (commandName) {
+        case 'pending':
+          await handlePendingCommand(interaction)
+          break
 
-      case 'activate':
-        await handleActivateCommand(interaction)
-        break
+        case 'activate':
+          await handleActivateCommand(interaction)
+          break
 
-      case 'stats':
-        await handleStatsCommand(interaction)
-        break
+        case 'stats':
+          await handleStatsCommand(interaction)
+          break
+      }
+      return
+    }
+
+    if (interaction.isButton()) {
+      await handleActivateButton(interaction)
+      return
     }
   } catch (error) {
     console.error('Command error:', error)
@@ -181,22 +186,7 @@ async function handleActivateCommand(interaction) {
       return
     }
 
-    // Generate activation code compatible with the app if not provided
-    const activationCode = customCode || generateActivationCode(installId, request.user_email)
-
-    // Update the request
-    const { error: updateError } = await supabase
-      .from('activation_requests')
-      .update({
-        status: 'activated',
-        activation_code: activationCode,
-        activated_at: new Date().toISOString()
-      })
-      .eq('id', request.id)
-
-    if (updateError) {
-      throw new Error(`Update failed: ${updateError.message}`)
-    }
+    const activationCode = await activateRequest(request, customCode)
 
     // Send success embed
     const embed = new EmbedBuilder()
@@ -241,6 +231,111 @@ async function handleActivateCommand(interaction) {
     console.error('Activate command error:', error)
     const message = error?.message ? `❌ Failed to activate license. ${error.message}` : '❌ Failed to activate license.'
     await interaction.editReply(message)
+  }
+}
+
+async function handleActivateButton(interaction) {
+  const customId = interaction.customId || ''
+  if (!customId.startsWith('activate:')) return
+
+  await interaction.deferReply({ ephemeral: true })
+
+  const requestId = customId.split(':')[1]
+  if (!requestId) {
+    await interaction.editReply('❌ Invalid activation button.')
+    return
+  }
+
+  try {
+    const { data: request, error } = await supabase
+      .from('activation_requests')
+      .select('*')
+      .eq('id', requestId)
+      .maybeSingle()
+
+    if (error) {
+      throw new Error(`Lookup failed: ${error.message}`)
+    }
+
+    if (!request) {
+      await interaction.editReply('❌ Activation request not found.')
+      return
+    }
+
+    if (request.status !== 'pending') {
+      const codeHint = request.activation_code ? ` Activation code: \`${request.activation_code}\`` : ''
+      await interaction.editReply(`⚠️ Request status is \`${request.status}\`. ${codeHint}`)
+      await disableActivationButton(interaction)
+      return
+    }
+
+    const activationCode = await activateRequest(request)
+
+    await interaction.editReply(`✅ Activated. Code: \`${activationCode}\``)
+    await disableActivationButton(interaction)
+
+    const emailResult = await sendActivationEmail(request.user_email, activationCode, request.install_id)
+    if (!emailResult.ok && !emailResult.skipped) {
+      await interaction.followUp({
+        content: `⚠️ Activation email failed: ${emailResult.error || 'Unknown error'}`,
+        ephemeral: true
+      })
+    } else if (emailResult.ok) {
+      const queuedMsg = emailResult.id
+        ? `✅ Activation email queued (id: ${emailResult.id}).`
+        : '✅ Activation email queued.'
+      await interaction.followUp({ content: queuedMsg, ephemeral: true })
+    } else if (emailResult.skipped) {
+      await interaction.followUp({ content: '⚠️ Activation email skipped (RESEND_API_KEY not set).', ephemeral: true })
+    }
+
+    const publicEmbed = new EmbedBuilder()
+      .setTitle('🎉 License Activated!')
+      .setColor(0x00ff00)
+      .setDescription(`License for **${request.user_email}** has been activated!`)
+      .setTimestamp()
+
+    await interaction.followUp({ embeds: [publicEmbed] })
+  } catch (error) {
+    console.error('Button activate error:', error)
+    const message = error?.message ? `❌ Failed to activate license. ${error.message}` : '❌ Failed to activate license.'
+    await interaction.editReply(message)
+  }
+}
+
+async function activateRequest(request, customCode) {
+  const activationCode = customCode || generateActivationCode(request.install_id, request.user_email)
+
+  const { error: updateError } = await supabase
+    .from('activation_requests')
+    .update({
+      status: 'activated',
+      activation_code: activationCode,
+      activated_at: new Date().toISOString()
+    })
+    .eq('id', request.id)
+
+  if (updateError) {
+    throw new Error(`Update failed: ${updateError.message}`)
+  }
+
+  return activationCode
+}
+
+async function disableActivationButton(interaction) {
+  try {
+    const row = interaction.message?.components?.[0]
+    if (!row) return
+    const updated = {
+      type: 1,
+      components: row.components.map((component) => ({
+        ...component,
+        disabled: true
+      }))
+    }
+    await interaction.message.edit({ components: [updated] })
+  } catch (error) {
+    console.warn('Failed to disable button:', error?.message || error)
   }
 }
 

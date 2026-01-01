@@ -61,40 +61,76 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    // Send Discord notification
+    // Send Discord notification (prefer bot+button, fallback to webhook)
     const discordWebhookUrl = Deno.env.get('DISCORD_WEBHOOK_URL')
-    if (discordWebhookUrl) {
-      try {
-        const embed = {
-          title: '🎉 New PassGen Activation Request!',
-          color: 0x3b82f6,
-          fields: [
-            {
-              name: '👤 User Email',
-              value: user_email,
-              inline: true
-            },
-            {
-              name: '🆔 Install ID',
-              value: `\`${install_id}\``,
-              inline: true
-            },
-            {
-              name: '💰 Payment',
-              value: `${payment_method || 'paypal'} - $${payment_amount || 15.00}`,
-              inline: true
-            },
-            {
-              name: '📅 Time',
-              value: new Date().toLocaleString(),
-              inline: false
-            }
-          ],
-          footer: {
-            text: 'PassGen Activation Dashboard'
+    const discordBotToken = Deno.env.get('DISCORD_BOT_TOKEN')
+    const rawChannelId = Deno.env.get('DISCORD_CHANNEL_ID')
+    const channelId = normalizeChannelId(rawChannelId)
+
+    try {
+      const embed = {
+        title: '🎉 New PassGen Activation Request!',
+        color: 0x3b82f6,
+        fields: [
+          {
+            name: '👤 User Email',
+            value: user_email,
+            inline: true
+          },
+          {
+            name: '🆔 Install ID',
+            value: `\`${install_id}\``,
+            inline: true
+          },
+          {
+            name: '💰 Payment',
+            value: `${payment_method || 'paypal'} - $${payment_amount || 15.00}`,
+            inline: true
+          },
+          {
+            name: '📅 Time',
+            value: new Date().toLocaleString(),
+            inline: false
           }
+        ],
+        footer: {
+          text: 'PassGen Activation Dashboard'
+        }
+      }
+
+      if (discordBotToken && channelId) {
+        const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bot ${discordBotToken}`
+          },
+          body: JSON.stringify({
+            embeds: [embed],
+            components: [
+              {
+                type: 1,
+                components: [
+                  {
+                    type: 2,
+                    style: 3,
+                    label: 'Activate',
+                    custom_id: `activate:${data.id}`,
+                    emoji: { name: '✅' }
+                  }
+                ]
+              }
+            ]
+          })
+        })
+
+        if (!response.ok) {
+          const text = await response.text()
+          throw new Error(`Discord bot API error: ${response.status} ${text}`)
         }
 
+        console.log('Discord bot notification sent')
+      } else if (discordWebhookUrl) {
         await fetch(discordWebhookUrl, {
           method: 'POST',
           headers: {
@@ -102,12 +138,11 @@ Deno.serve(async (req: Request) => {
           },
           body: JSON.stringify({ embeds: [embed] })
         })
-
-        console.log('Discord notification sent')
-      } catch (discordError) {
-        console.error('Discord notification failed:', discordError)
-        // Don't fail the request if Discord fails
+        console.log('Discord webhook notification sent')
       }
+    } catch (discordError) {
+      console.error('Discord notification failed:', discordError)
+      // Don't fail the request if Discord fails
     }
 
     return new Response(JSON.stringify(data), {
@@ -123,3 +158,11 @@ Deno.serve(async (req: Request) => {
     })
   }
 })
+
+function normalizeChannelId(value?: string | null) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const match = raw.match(/\/channels\/\d+\/(\d+)/)
+  if (match?.[1]) return match[1]
+  return raw
+}

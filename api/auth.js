@@ -20,6 +20,7 @@ module.exports = async (req, res) => {
     const Google = GoogleProvider.default || GoogleProvider
     const response = await Auth(request, {
       trustHost: true,
+      basePath: '/api/auth',
       secret,
       providers: [
         Google({ clientId, clientSecret })

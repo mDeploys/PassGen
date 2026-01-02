@@ -1,4 +1,5 @@
 import type { StorageConfig, ProviderId } from './storageTypes'
+import { ConfigStore } from './configStore'
 import type { PasswordEntry } from './encryption'
 
 const PROVIDER_LABELS: Record<ProviderId, string> = {
@@ -31,6 +32,12 @@ export class StorageManager {
     }
 
     this.currentConfig = config
+    try {
+      const store = new ConfigStore()
+      store.setStorageConfig(config)
+    } catch (error) {
+      console.warn('Failed to persist storage config locally:', error)
+    }
     await api.storageConfigure(config)
     await this.refreshProviderStatus()
   }

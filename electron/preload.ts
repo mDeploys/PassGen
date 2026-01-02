@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   storageSelectVaultFolder: () => ipcRenderer.invoke('storage:selectVaultFolder'),
   storageTestS3: (config: any) => ipcRenderer.invoke('storage:testS3', config),
   storageS3SignedRequest: (config: any, key: string) => ipcRenderer.invoke('storage:s3SignedRequest', config, key),
+  oauthGoogleDrive: () => ipcRenderer.invoke('oauth:google'),
   storageGoogleDriveConnect: () => ipcRenderer.invoke('storage:googleDriveConnect'),
   storageGoogleDriveDisconnect: () => ipcRenderer.invoke('storage:googleDriveDisconnect')
 })
@@ -95,7 +96,8 @@ declare global {
       storageSelectVaultFolder: () => Promise<{ success: boolean; folder?: string }>
       storageTestS3: (config: any) => Promise<{ ok: boolean; error?: string }>
       storageS3SignedRequest: (config: any, key: string) => Promise<Record<string, string>>
-      storageGoogleDriveConnect: () => Promise<{ email: string }>
+      oauthGoogleDrive: () => Promise<{ email: string; provider: 'google-drive'; token: any }>
+      storageGoogleDriveConnect: () => Promise<{ email: string; provider: 'google-drive'; token: any }>
       storageGoogleDriveDisconnect: () => Promise<void>
     }
   }

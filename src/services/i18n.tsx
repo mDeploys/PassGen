@@ -151,6 +151,7 @@ const translations: Record<Language, Record<string, string>> = {
     'Disconnect': 'قطع الاتصال',
     'Connect': 'اتصال',
     'Connecting...': 'جارٍ الاتصال...',
+    'Vault backend is not available': 'خادم الخزنة غير متاح',
     'Google Drive stores only encrypted vault snapshots. No plaintext ever leaves this device.': 'Google Drive يخزّن فقط لقطات خزنة مشفّرة. لا يغادر أي نص صريح هذا الجهاز.',
     'Endpoint (optional)': 'نقطة النهاية (اختياري)',
     'https://s3.amazonaws.com or custom endpoint': 'https://s3.amazonaws.com أو نقطة نهاية مخصصة',

@@ -279,6 +279,11 @@
   color: #94a3b8;
 }
 
+.help-text.error-text {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
 .help-text a {
   color: #667eea;
   text-decoration: none;

@@ -24,6 +24,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
   const [googleConnected, setGoogleConnected] = useState(false)
   const [googleEmail, setGoogleEmail] = useState('')
   const [googleBusy, setGoogleBusy] = useState(false)
+  const [googleError, setGoogleError] = useState<string | null>(null)
 
   const [s3Config, setS3Config] = useState({
     endpoint: '',
@@ -72,6 +73,11 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
     if (open) setStep('select')
   }, [open])
 
+  useEffect(() => {
+    if (!open) return
+    setGoogleError(null)
+  }, [open, provider])
+
   const handleProviderSelect = (next: ProviderId) => {
     if (next === 'dropbox' || next === 'onedrive') return
     if (!isProviderAllowed(next, tier)) {
@@ -94,7 +100,10 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
 
   const handleSelectFolder = async () => {
     const api = (window as any).electronAPI
-    if (!api?.storageSelectVaultFolder) return
+    if (!api?.storageSelectVaultFolder) {
+      alert(t('Vault backend is not available'))
+      return
+    }
     const result = await api.storageSelectVaultFolder()
     if (result?.success && result.folder) {
       setLocalFolder(result.folder)
@@ -103,14 +112,20 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
 
   const handleGoogleConnect = async () => {
     const api = (window as any).electronAPI
-    if (!api?.storageGoogleDriveConnect) return
+    const connect = api?.oauthGoogleDrive || api?.storageGoogleDriveConnect
+    if (!connect) {
+      setGoogleError(t('Vault backend is not available'))
+      return
+    }
     try {
       setGoogleBusy(true)
-      const result = await api.storageGoogleDriveConnect()
+      setGoogleError(null)
+      const result = await connect()
       setGoogleConnected(true)
       setGoogleEmail(result.email || '')
     } catch (error) {
-      alert('Google Drive connection failed: ' + (error as Error).message)
+      const message = t('Connection failed: {{message}}', { message: (error as Error).message })
+      setGoogleError(message)
     } finally {
       setGoogleBusy(false)
     }
@@ -118,12 +133,19 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
 
   const handleGoogleDisconnect = async () => {
     const api = (window as any).electronAPI
-    if (!api?.storageGoogleDriveDisconnect) return
+    if (!api?.storageGoogleDriveDisconnect) {
+      setGoogleError(t('Vault backend is not available'))
+      return
+    }
     try {
       setGoogleBusy(true)
+      setGoogleError(null)
       await api.storageGoogleDriveDisconnect()
       setGoogleConnected(false)
       setGoogleEmail('')
+    } catch (error) {
+      const message = t('Connection failed: {{message}}', { message: (error as Error).message })
+      setGoogleError(message)
     } finally {
       setGoogleBusy(false)
     }
@@ -131,7 +153,10 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
 
   const handleTestS3 = async () => {
     const api = (window as any).electronAPI
-    if (!api?.storageTestS3) return
+    if (!api?.storageTestS3) {
+      setS3TestResult(t('Vault backend is not available'))
+      return
+    }
     if (!s3Config.bucket || !s3Config.accessKeyId || !s3Config.secretAccessKey || !s3Config.region) {
       setS3TestResult(t('Please fill in all required fields first.'))
       return
@@ -363,6 +388,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                     <p className="help-text subtle">{t('This field is read-only. Use Connect to link your account.')}</p>
                   </div>
                   <p className="help-text">{t('Google Drive stores only encrypted vault snapshots. No plaintext ever leaves this device.')}</p>
+                  {googleError && <p className="help-text error-text">{googleError}</p>}
                 </>
               )}
 

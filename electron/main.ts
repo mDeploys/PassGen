@@ -1,13 +1,32 @@
 import { app, BrowserWindow, ipcMain, shell, Menu, dialog, clipboard } from 'electron'
 import * as http from 'http'
-// Load environment variables from .env if present (development convenience)
+import * as fs from 'fs'
+import * as path from 'path'
+// Load environment variables from .env (dev + packaged extraResources)
 try {
-  // Dynamically require without adding type dep; ignore if not installed
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const dotenv = require('dotenv')
-  dotenv.config()
-} catch {}
-import * as path from 'path'
+  const candidates = [
+    path.join(process.cwd(), '.env'),
+    path.join(process.cwd(), 'resources', '.env'),
+    path.join(process.resourcesPath || '', '.env'),
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', '.env')
+  ]
+  let loaded = false
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      dotenv.config({ path: candidate, override: true })
+      console.log(`[ENV] Loaded .env from ${candidate}`)
+      loaded = true
+      break
+    }
+  }
+  if (!loaded) {
+    console.warn('[ENV] No .env file found in expected locations')
+  }
+} catch (error) {
+  console.warn('[ENV] Failed to load .env:', (error as Error).message)
+}
 import { VaultRepository } from './vault/vaultRepository'
 import { runVaultSelfTests } from './vault/selfTest'
 
@@ -417,6 +436,20 @@ if (!gotTheLock) {
     setInterval(() => checkForUpdates(true), 6 * 60 * 60 * 1000)
     startBridgeServer()
 
+    if (process.argv.includes('--oauth-ipc-test')) {
+      mainWindow?.webContents.once('did-finish-load', async () => {
+        try {
+          console.log('[OAUTH TEST] Triggering IPC OAuth flow...')
+          const result = await mainWindow?.webContents.executeJavaScript('window.electronAPI.oauthGoogleDrive()')
+          console.log('[OAUTH TEST] Success:', result)
+        } catch (error) {
+          console.error('[OAUTH TEST] Failed:', (error as Error).message)
+        } finally {
+          setTimeout(() => app.quit(), 1500)
+        }
+      })
+    }
+
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
@@ -575,6 +608,10 @@ ipcMain.handle('storage:testS3', async (_event, config) => {
 
 ipcMain.handle('storage:s3SignedRequest', async (_event, config, key: string) => {
   return vaultRepository.getSignedS3Request(config, key)
+})
+
+ipcMain.handle('oauth:google', async () => {
+  return vaultRepository.connectGoogleDrive()
 })
 
 ipcMain.handle('storage:googleDriveConnect', async () => {

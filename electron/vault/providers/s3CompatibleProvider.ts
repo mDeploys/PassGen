@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { HttpRequest } from '@smithy/protocol-http'
 import { Sha256 } from '@aws-crypto/sha256-js'
 import type { S3CompatibleProviderConfig, ProviderVersion } from '../types'
@@ -51,7 +51,24 @@ export class S3CompatibleProvider implements StorageProvider {
     if (!valid.ok) return valid
     try {
       const client = this.getClient()
-      await client.send(new HeadBucketCommand({ Bucket: this.config.bucket }))
+      const key = `${this.getPrefix()}passgen-verify-${Date.now()}.txt`
+      const body = Buffer.from(`passgen-verify:${new Date().toISOString()}`)
+      await client.send(new PutObjectCommand({
+        Bucket: this.config.bucket,
+        Key: key,
+        Body: body,
+        ContentType: 'text/plain'
+      }))
+
+      await client.send(new GetObjectCommand({
+        Bucket: this.config.bucket,
+        Key: key
+      }))
+
+      await client.send(new DeleteObjectCommand({
+        Bucket: this.config.bucket,
+        Key: key
+      }))
       return { ok: true }
     } catch (error) {
       return { ok: false, error: (error as Error).message }

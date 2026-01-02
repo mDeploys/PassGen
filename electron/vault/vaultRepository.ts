@@ -228,7 +228,7 @@ export class VaultRepository {
     return Object.fromEntries(Object.entries(signed.headers || {}).map(([k, v]) => [k, String(v)]))
   }
 
-  async connectGoogleDrive(): Promise<{ email: string }> {
+  async connectGoogleDrive(): Promise<{ email: string; provider: 'google-drive'; token: any }> {
     const oauthBase = this.getGoogleOAuthConfig()
     if (!oauthBase) {
       throw new Error('Google Drive OAuth credentials are not configured')
@@ -254,7 +254,7 @@ export class VaultRepository {
       this.pendingGoogleDrive = config
     }
 
-    return { email }
+    return { email, provider: 'google-drive', token: tokens }
   }
 
   async disconnectGoogleDrive(): Promise<void> {
@@ -418,7 +418,13 @@ export class VaultRepository {
   private getGoogleOAuthConfig(): GoogleOAuthConfig | null {
     const clientId = process.env.PASSGEN_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
     const clientSecret = process.env.PASSGEN_GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
-    if (!clientId || !clientSecret) return null
+    if (!clientId || !clientSecret) {
+      const missing: string[] = []
+      if (!clientId) missing.push('PASSGEN_GOOGLE_CLIENT_ID/GOOGLE_CLIENT_ID')
+      if (!clientSecret) missing.push('PASSGEN_GOOGLE_CLIENT_SECRET/GOOGLE_CLIENT_SECRET')
+      console.warn(`[OAuth] Missing Google OAuth env vars: ${missing.join(', ')}`)
+      return null
+    }
     return {
       clientId,
       clientSecret,

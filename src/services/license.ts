@@ -22,11 +22,11 @@ export function isProviderAllowed(provider: ProviderId, tier: PremiumTier): bool
   if (provider === 'local') return true
 
   if (provider === 'google-drive' || provider === 'dropbox' || provider === 'onedrive') {
-    return tier === 'cloud' || tier === 'byos'
+    return tier === 'cloud' || tier === 'byos' || isPremiumEnabled()
   }
 
   if (provider === 's3-compatible') {
-    return tier === 'byos'
+    return tier === 'byos' || isPremiumEnabled()
   }
 
   return false

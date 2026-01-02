@@ -10,6 +10,7 @@
     "electron:dev": "tsc && concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "tsc && vite build && node scripts/sync-icons.js && electron-builder",
     "test:vault": "tsc && electron . --vault-self-test",
+    "test:oauth": "tsc && electron . --oauth-ipc-test",
     "gen:activation": "node scripts/generate-activation.js",
     "dashboard": "node dashboard-server.js",
     "discord-bot": "node discord-bot.js"
@@ -64,6 +65,12 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/.env",
+        "to": ".env"
+      }
     ],
     "win": {
       "icon": "build/icon.png",

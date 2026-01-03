@@ -57,11 +57,30 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
   const [code, setCode] = useState('')
   const [testResult, setTestResult] = useState<string>('')
   const [devSecret, setDevSecret] = useState<string>(showTestVerify ? store.getSellerSecretForDebug() : '')
+  const ensureAppAccount = async (): Promise<boolean> => {
+    const api = (window as any).electronAPI
+    if (!api?.authGetSession) {
+      alert(t('App account required to continue.'))
+      return false
+    }
+    const session = await api.authGetSession()
+    if (session?.email) return true
+    if (api?.authLogin) {
+      await api.authLogin(store.getInstallId())
+    }
+    alert(t('App account required to continue.'))
+    return false
+  }
+
   const activateWithCode = async () => {
     if (!code) { alert(t('Enter activation code')); return }
     if (!userEmail) { alert(t('Enter your email first')); return }
     if (!store.verifyActivationCode(code, userEmail)) {
       alert(t('Invalid activation code.'))
+      return
+    }
+    const hasAccount = await ensureAppAccount()
+    if (!hasAccount) {
       return
     }
     try {
@@ -75,10 +94,10 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
         onClose()
         alert(t('Premium activated. Enjoy!'))
       } else {
-        alert(t('Activation request sent. You will be activated after verification.'))
+        alert(t('Activation pending. Please contact support if it does not update soon.'))
       }
     } catch (e:any) {
-      alert(t('Activation request sent. You will be activated after verification.'))
+      alert(t('Connection failed: {{message}}', { message: e.message }))
     }
   }
 

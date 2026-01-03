@@ -307,6 +307,7 @@ const translations: Record<Language, Record<string, string>> = {
     'override secret for testing': 'تعديل السر للاختبار',
     'Used to compute codes during development/testing without rebuild.': 'يُستخدم لحساب الرموز أثناء التطوير/الاختبار دون إعادة بناء.',
     'Activation request sent. You will be activated after verification.': 'تم إرسال طلب التفعيل. سيتم تفعيلك بعد التحقق.',
+    'Activation pending. Please contact support if it does not update soon.': 'التفعيل معلق. يرجى التواصل مع الدعم إذا لم يتم التحديث قريبًا.',
     'Failed to send activation request.': 'فشل إرسال طلب التفعيل.',
     'Failed to send activation request: {{message}}': 'فشل إرسال طلب التفعيل: {{message}}',
     'Enter activation code': 'أدخل رمز التفعيل',

@@ -19,6 +19,9 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
   const store = new ConfigStore()
   const { t } = useI18n()
   const [installId, setInstallId] = useState<string>('')
+  const [appAccount, setAppAccount] = useState<{ email?: string } | null>(null)
+  const [authBusy, setAuthBusy] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
   const showTestVerify = ((import.meta as any)?.env?.DEV as boolean) === true
 
   useEffect(() => {
@@ -26,6 +29,32 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
       setInstallId(store.getInstallId())
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const api = (window as any).electronAPI
+    if (!api?.authGetSession) return
+    api.authGetSession()
+      .then((session: any) => {
+        setAppAccount(session)
+        setAuthError(null)
+      })
+      .catch((error: Error) => {
+        setAuthError(t('Connection failed: {{message}}', { message: error.message }))
+      })
+  }, [open, t])
+
+  useEffect(() => {
+    const api = (window as any).electronAPI
+    if (!api?.onAuthUpdated) return
+    const unsubscribe = api.onAuthUpdated((session: any) => {
+      setAppAccount(session)
+      setAuthError(null)
+    })
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [])
 
   const [userEmail, setUserEmail] = useState(store.getUserEmail())
   const [paymentMethod, setPaymentMethod] = useState<'paypal' | 'crypto'>('paypal')
@@ -70,6 +99,41 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
     }
     alert(t('App account required to continue.'))
     return false
+  }
+
+  const handleAuthLogin = async () => {
+    const api = (window as any).electronAPI
+    if (!api?.authLogin) {
+      setAuthError(t('Vault backend is not available'))
+      return
+    }
+    try {
+      setAuthBusy(true)
+      setAuthError(null)
+      await api.authLogin(store.getInstallId())
+    } catch (error: any) {
+      setAuthError(t('Connection failed: {{message}}', { message: error.message }))
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  const handleAuthLogout = async () => {
+    const api = (window as any).electronAPI
+    if (!api?.authLogout) {
+      setAuthError(t('Vault backend is not available'))
+      return
+    }
+    try {
+      setAuthBusy(true)
+      setAuthError(null)
+      await api.authLogout()
+      setAppAccount(null)
+    } catch (error: any) {
+      setAuthError(t('Connection failed: {{message}}', { message: error.message }))
+    } finally {
+      setAuthBusy(false)
+    }
   }
 
   const activateWithCode = async () => {
@@ -163,9 +227,41 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
           </div>
         </div>
 
-        <div className="payment-section">
+        <div className="activation-card">
           <div className="section-heading">
             <span className="pill">{t('Step 1')}</span>
+            <div>
+              <div className="section-title">{t('Continue with Google')}</div>
+              <div className="section-sub">{t('Sign in to verify your plan and unlock cloud storage.')}</div>
+            </div>
+          </div>
+          <div className="email-capture">
+            <label>{t('Account')}</label>
+            <div className="input-with-button">
+              <input
+                type="text"
+                value={appAccount?.email ? t('Signed in as {{email}}', { email: appAccount.email }) : t('Not signed in')}
+                readOnly
+                aria-readonly="true"
+                className="ltr-input"
+              />
+              {appAccount?.email ? (
+                <button className="btn-secondary" onClick={handleAuthLogout} disabled={authBusy}>
+                  {t('Sign out')}
+                </button>
+              ) : (
+                <button className="btn-secondary" onClick={handleAuthLogin} disabled={authBusy}>
+                  {authBusy ? t('Connecting...') : t('Continue with Google')}
+                </button>
+              )}
+            </div>
+          </div>
+          {authError && <p className="help-text error-text">{authError}</p>}
+        </div>
+
+        <div className="payment-section">
+          <div className="section-heading">
+            <span className="pill">{t('Step 2')}</span>
             <div>
               <div className="section-title">{t('Pay using the QR that suits you')}</div>
               <div className="section-sub">{t('Scan the QR with your phone to complete payment.')}</div>
@@ -222,7 +318,7 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
 
         <div className="activation-card">
           <div className="section-heading">
-            <span className="pill accent">{t('Step 2')}</span>
+            <span className="pill accent">{t('Step 3')}</span>
             <div>
               <div className="section-title">{t('Request activation after payment')}</div>
               <div className="section-sub">{t('Share your email, then paste the code you get back to unlock Premium.')}</div>

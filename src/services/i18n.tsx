@@ -160,6 +160,7 @@ const translations: Record<Language, Record<string, string>> = {
     'Sign out': 'تسجيل الخروج',
     'Step 1': 'الخطوة 1',
     'Step 2': 'الخطوة 2',
+    'Step 3': 'الخطوة 3',
     'Connect Google Drive': 'ربط Google Drive',
     'Sign in to verify your plan and unlock cloud storage.': 'سجّل الدخول للتحقق من خطتك وفتح التخزين السحابي.',
     'Link Drive to store encrypted vault snapshots.': 'اربط Drive لتخزين لقطات خزنة مشفّرة.',

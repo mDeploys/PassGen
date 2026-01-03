@@ -14,6 +14,10 @@ module.exports = async (req, res) => {
       return respondJson(res, 500, { error: 'Missing Auth.js configuration' })
     }
 
+    const baseUrl = getBaseUrl(req)
+    const secureCookie = baseUrl.startsWith('https://')
+    const cookiePrefix = secureCookie ? '__Secure-' : ''
+    const sessionCookieName = `${cookiePrefix}authjs.session-token`
     const request = await toRequest(req)
     const { Auth } = await import('@auth/core')
     const GoogleProvider = await import('@auth/core/providers/google')
@@ -25,6 +29,17 @@ module.exports = async (req, res) => {
       providers: [
         Google({ clientId, clientSecret })
       ],
+      cookies: {
+        sessionToken: {
+          name: sessionCookieName,
+          options: {
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+            secure: secureCookie
+          }
+        }
+      },
       session: { strategy: 'jwt' },
       callbacks: {
         async jwt({ token, user }) {

@@ -22,7 +22,14 @@ module.exports = async (req, res) => {
   }
 
   const { getToken } = await import('@auth/core/jwt')
-  const sessionToken = await getToken({ req, secret })
+  const secureCookie = getBaseUrl(req).startsWith('https://')
+  const cookiePrefix = secureCookie ? '__Secure-' : ''
+  const sessionToken = await getToken({
+    req,
+    secret,
+    secureCookie,
+    cookieName: `${cookiePrefix}authjs.session-token`
+  })
   if (!sessionToken || !sessionToken.email) {
     const callbackUrl = `${getBaseUrl(req)}/desktop/login?device=${encodeURIComponent(deviceId)}`
     const signinUrl = `${getBaseUrl(req)}/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`

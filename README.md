@@ -33,6 +33,9 @@ A secure and user-friendly desktop application for generating strong passwords a
   - Cloud sync (Google Drive, AWS S3, DigitalOcean Spaces)
   - Automatic backups
   - Priority support
+
+<img width="815" height="664" alt="image" src="https://github.com/user-attachments/assets/dbb20dd9-5371-4c81-b0e4-02a62200b47f" />
+
 ## Activation Dashboard
 
 For developers/sellers managing premium activations:
@@ -206,7 +209,7 @@ The built application will be available in the `release` folder.
 2. Complete PayPal payment ($3.99/month)
 3. Request activation code via email
 4. Enter activation code to unlock premium features
-<img width="873" height="657" alt="image" src="https://github.com/user-attachments/assets/3f0e7972-32b4-48b3-a38b-d364a69a9029" />
+<img width="877" height="663" alt="image" src="https://github.com/user-attachments/assets/a1483bd4-50ff-48dd-992b-8be894878a64" />
 <img width="759" height="531" alt="image" src="https://github.com/user-attachments/assets/13d12a58-a763-4918-b6d5-fba9552e0036" />
 <img width="562" height="498" alt="image" src="https://github.com/user-attachments/assets/50e8092f-b006-4918-80f4-c1582666d8de" />
 
@@ -255,3 +258,4 @@ PassGen/
 ## License
 
 MIT
+

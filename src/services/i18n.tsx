@@ -33,6 +33,7 @@ const translations: Record<Language, Record<string, string>> = {
     'No passkey found. Please use your master password.': 'لم يتم العثور على مفتاح مرور. يرجى استخدام كلمة المرور الرئيسية.',
     'Passkey verification cancelled': 'تم إلغاء التحقق من مفتاح المرور',
     'Passkey verified! Now please enter your master password to unlock the vault.': 'تم التحقق من مفتاح المرور! الآن أدخل كلمة المرور الرئيسية لفتح الخزنة.',
+    'Passkey verified. Enter your master password.': 'تم التحقق من مفتاح المرور. أدخل كلمة المرور الرئيسية.',
     'Passkey does not match. Please use your master password.': 'مفتاح المرور غير مطابق. يرجى استخدام كلمة المرور الرئيسية.',
     'Passkey verification cancelled.': 'تم إلغاء التحقق من مفتاح المرور.',
     'Passkey verification failed: {{message}}': 'فشل التحقق من مفتاح المرور: {{message}}',

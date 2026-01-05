@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { copyText } from './services/clipboard'
 import SplashScreen from './components/SplashScreen'
@@ -49,9 +49,11 @@ function App() {
   const [showPassword, setShowPassword] = useState(false)
   const [passwordHint, setPasswordHint] = useState('')
   const [passwordHintInput, setPasswordHintInput] = useState('')
+  const [passkeyNotice, setPasskeyNotice] = useState<string | null>(null)
   const [premiumTier, setPremiumTier] = useState(getPremiumTier())
   const isPremium = premiumTier !== 'free'
   const { t, isRTL } = useI18n()
+  const masterPasswordRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const openUpgrade = () => setShowUpgrade(true)
@@ -154,6 +156,7 @@ function App() {
       setMasterPassword(masterPasswordInput)
       await storageManager.initializeEncryption(masterPasswordInput)
       setHasVault(true)
+      setPasskeyNotice(null)
     } catch (error) {
       alert((error as Error).message || t('Incorrect master password. Please try again.'))
       return
@@ -171,8 +174,12 @@ function App() {
         return
       }
 
-      // Check if we're in a secure context
-      if (!window.isSecureContext) {
+      // Check if we're in a secure context and allowed origin
+      const protocol = window.location.protocol
+      const host = window.location.hostname
+      const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '[::1]'
+      const isAllowedOrigin = protocol === 'https:' || (protocol === 'http:' && isLocalhost)
+      if (!window.isSecureContext || !isAllowedOrigin) {
         alert(t('Passkey requires a secure context. Please use your master password.'))
         return
       }
@@ -184,13 +191,52 @@ function App() {
         return
       }
 
+      const decodeCredentialId = (value: string): Uint8Array | null => {
+        if (!value) return null
+        const isHex = /^[0-9a-f]+$/i.test(value) && value.length % 2 === 0
+        if (isHex) {
+          const bytes = new Uint8Array(value.length / 2)
+          for (let i = 0; i < value.length; i += 2) {
+            bytes[i / 2] = parseInt(value.slice(i, i + 2), 16)
+          }
+          return bytes
+        }
+        try {
+          const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
+          const padLength = (4 - (base64.length % 4)) % 4
+          const padded = base64 + '='.repeat(padLength)
+          const binary = atob(padded)
+          const bytes = new Uint8Array(binary.length)
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i)
+          }
+          return bytes
+        } catch {
+          return null
+        }
+      }
+
+      const storedIdBytes = decodeCredentialId(cred.credentialId)
+      const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
+        if (bytes.buffer instanceof ArrayBuffer) {
+          return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+        }
+        const copy = new Uint8Array(bytes.byteLength)
+        copy.set(bytes)
+        return copy.buffer
+      }
+      const allowCredentials = storedIdBytes
+        ? [{ id: toArrayBuffer(storedIdBytes), type: 'public-key' as const }]
+        : undefined
+
       // Perform WebAuthn assertion (verify passkey)
       const challenge = crypto.getRandomValues(new Uint8Array(32))
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge: challenge,
           timeout: 60000,
-          userVerification: 'preferred'
+          userVerification: 'preferred',
+          ...(allowCredentials ? { allowCredentials } : {})
         }
       })
 
@@ -211,9 +257,12 @@ function App() {
       const match = stored === assertionId || (storedLooksHex && stored === assertionRawIdHex)
 
       if (match) {
-        // Passkey verified, need to get master password to initialize encryption
-        alert(t('Passkey verified! Now please enter your master password to unlock the vault.'))
+        // Passkey verified, need master password to initialize encryption
         setMasterPasswordInput('')
+        setPasskeyNotice(t('Passkey verified. Enter your master password.'))
+        requestAnimationFrame(() => {
+          masterPasswordRef.current?.focus()
+        })
       } else {
         alert(t('Passkey does not match. Please use your master password.'))
       }
@@ -311,7 +360,7 @@ function App() {
   return (
     <div className="app">
       <CustomTitleBar />
-      <div className="container">
+      <div className={`container ${mode === 'auth' ? 'container-no-scroll' : 'container-scroll'}`}>
         {mode === 'setup' && (
           <StorageSetup open={true} onClose={() => {}} onConfigured={handleStorageConfigured} />
         )}
@@ -326,6 +375,7 @@ function App() {
             <div className="auth-form">
               <div className="password-input-wrapper">
                 <input
+                  ref={masterPasswordRef}
                   type={showPassword ? "text" : "password"}
                   value={masterPasswordInput}
                   onChange={(e) => setMasterPasswordInput(e.target.value)}
@@ -370,6 +420,7 @@ function App() {
                   {t('Unlock with Passkey')}
                 </button>
               )}
+              {passkeyNotice && <p className="auth-passkey-note">{passkeyNotice}</p>}
               <p className="auth-note">
                 {t("Master password unlocks your vault. Don't forget it.")}
               </p>

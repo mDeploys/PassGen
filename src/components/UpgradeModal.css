@@ -20,6 +20,11 @@
   box-shadow: 0 10px 40px rgba(0,0,0,0.12);
 }
 
+.modal-scroll {
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
 .modal h2 { color: #111827; margin: 0 0 6px; text-align: center; }
 .modal-sub { text-align: center; color: #4b5563; margin-bottom: 14px; }
 .benefits { margin: 0 0 14px 18px; color: #555; }

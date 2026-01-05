@@ -3,7 +3,6 @@ import { PasswordEntry } from '../services/encryption'
 import { StorageManager } from '../services/storageManager'
 import './PasswordVault.css'
 import { copyText } from '../services/clipboard'
-import { ConfigStore } from '../services/configStore'
 import { getEntryLimit, getPremiumTier } from '../services/license'
 import { useI18n } from '../services/i18n'
 
@@ -33,7 +32,6 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
   const [copyMessageType, setCopyMessageType] = useState<'ok' | 'error' | ''>('')
   const [providerLabel, setProviderLabel] = useState(storageManager.getCurrentProvider())
   const [premiumTier, setPremiumTier] = useState(getPremiumTier())
-  const store = new ConfigStore()
 
   useEffect(() => {
     loadEntries()
@@ -344,64 +342,6 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
     })
   }
 
-  const handleSetupPasskey = async () => {
-    try {
-      setLoading(true)
-
-      // Check if WebAuthn is supported
-      if (!navigator.credentials || !navigator.credentials.create) {
-        alert(t('Passkey is not supported on this device or browser'))
-        return
-      }
-
-      // Check if we're in a secure context
-      if (!window.isSecureContext) {
-        alert(t('Passkey requires a secure context. This feature is not available in this mode.'))
-        return
-      }
-
-      // Create passkey
-      const challenge = crypto.getRandomValues(new Uint8Array(32))
-      const credential = await navigator.credentials.create({
-        publicKey: {
-          challenge: challenge,
-          rp: { name: 'PassGen' },
-          user: {
-            id: crypto.getRandomValues(new Uint8Array(16)),
-            name: 'passgen-user',
-            displayName: 'PassGen User'
-          },
-          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-          timeout: 60000,
-          attestation: 'none'
-        }
-      })
-
-      if (!credential) {
-        alert(t('Passkey registration cancelled'))
-        return
-      }
-
-      if (credential.type !== 'public-key') {
-        alert(t('Invalid credential type received'))
-        return
-      }
-
-      const credentialId = credential.id
-
-      store.setPasskeyCredential(credentialId, 'passkey-registered')
-      alert(t('Passkey setup successful! You can now unlock with your biometric.'))
-    } catch (e) {
-      const errorMsg = (e as Error).message
-      if (errorMsg.includes('cancel') || errorMsg.includes('dismissed')) {
-        alert(t('Passkey setup cancelled'))
-      } else {
-        alert(t('Passkey setup failed: {{message}}', { message: errorMsg }))
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
     <div className="password-vault">
@@ -438,7 +378,6 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
               )}
               <button onClick={() => window.dispatchEvent(new Event('open-storage-setup'))}>{t('Premium Access')}</button>
               <button onClick={() => window.dispatchEvent(new Event('open-storage-setup'))}>{t('Change Storage')}</button>
-              <button onClick={handleSetupPasskey} disabled={loading}>{t('Setup Passkey')}</button>
               {premiumTier !== 'free' && (
                 <>
                   <button onClick={handleExport} disabled={loading}>{t('Export Vault Backup')}</button>

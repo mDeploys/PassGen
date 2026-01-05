@@ -392,7 +392,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal clean" onClick={(e) => e.stopPropagation()}>
+      <div className="modal clean modal-scroll" onClick={(e) => e.stopPropagation()}>
         <div className="storage-setup">
           <h2>🔒 {t('Configure Storage')}</h2>
           <p className="subtitle">

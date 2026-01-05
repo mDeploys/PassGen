@@ -48,6 +48,9 @@ import type { AppAccountSession } from './vault/types'
 let mainWindow: BrowserWindow | null = null;
 let sessionToken: string | null = null;
 let bridgeServer: http.Server | null = null;  // HTTP server for extension bridge (all modes)
+let appServer: http.Server | null = null; // Local app server for WebAuthn-safe origin
+let appServerReady = false;
+const APP_SERVER_PORT = Number(process.env.PASSGEN_APP_SERVER_PORT) || 17864;
 const vaultRepository = new VaultRepository()
 function resolveIconPath() {
   try {
@@ -508,10 +511,14 @@ function createWindow() {
   mainWindow.center()
 
   // In development, use the Vite dev server
-  const isDev = process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL
+  const isDev = !app.isPackaged || process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL
 
   const forceFileInDev = process.env.PASSGEN_USE_FILE_DEV === 'true'
-  if (isDev && !forceFileInDev) {
+  const useAppServer = (!isDev || process.env.PASSGEN_USE_APP_SERVER === 'true') && appServerReady
+  if (useAppServer) {
+    const appUrl = `http://localhost:${APP_SERVER_PORT}/index.html`
+    mainWindow.loadURL(appUrl)
+  } else if (isDev && !forceFileInDev) {
     const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
     mainWindow.loadURL(devServerUrl)
   } else {
@@ -553,19 +560,22 @@ function createWindow() {
   })
 
   mainWindow.webContents.once('did-finish-load', () => {
-    migrateFileLocalStorageToApp().catch((error) => {
+    migrateLegacyLocalStorage().catch((error) => {
       console.warn('[MIGRATION] Failed:', (error as Error).message || error)
     })
   })
 }
 
-async function migrateFileLocalStorageToApp(): Promise<void> {
+async function migrateLegacyLocalStorage(): Promise<void> {
   if (!mainWindow || !app.isPackaged) return
   const currentUrl = mainWindow.webContents.getURL()
-  if (!currentUrl.startsWith(`${APP_PROTOCOL}://`)) return
+  const isAppScheme = currentUrl.startsWith(`${APP_PROTOCOL}://`)
+  const isLocalhost = currentUrl.startsWith(`http://localhost:${APP_SERVER_PORT}`)
+  if (!isAppScheme && !isLocalhost) return
 
+  const migrationKey = isLocalhost ? 'passgen-migrated-to-localhost' : 'passgen-migrated-to-app-scheme'
   const hasMigrated = await mainWindow.webContents.executeJavaScript(`
-    localStorage.getItem('passgen-migrated-to-app-scheme') === 'true'
+    localStorage.getItem('${migrationKey}') === 'true'
   `)
   if (hasMigrated) return
 
@@ -574,53 +584,73 @@ async function migrateFileLocalStorageToApp(): Promise<void> {
   `)
   if (hasAppData) {
     await mainWindow.webContents.executeJavaScript(`
-      localStorage.setItem('passgen-migrated-to-app-scheme', 'true')
+      localStorage.setItem('${migrationKey}', 'true')
     `)
     return
   }
 
-  const legacyWindow = new BrowserWindow({
-    show: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      webSecurity: true
-    }
-  })
-
-  try {
-    const legacyIndex = path.join(__dirname, '../dist/index.html')
-    await legacyWindow.loadFile(legacyIndex)
-    const legacyData = await legacyWindow.webContents.executeJavaScript(`
-      (() => {
-        const data = {};
-        Object.keys(localStorage)
-          .filter(k => k.startsWith('passgen-'))
-          .forEach((k) => { data[k] = localStorage.getItem(k); });
-        return data;
-      })()
-    `)
-
-    const entries = legacyData && typeof legacyData === 'object' ? Object.entries(legacyData as Record<string, string>) : []
-    if (entries.length > 0) {
-      const payload = JSON.stringify(legacyData)
-      await mainWindow.webContents.executeJavaScript(`
+  const readFromSource = async (loader: (win: BrowserWindow) => Promise<void>): Promise<Record<string, string>> => {
+    const legacyWindow = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        webSecurity: true
+      }
+    })
+    try {
+      await loader(legacyWindow)
+      const legacyData = await legacyWindow.webContents.executeJavaScript(`
         (() => {
-          const data = ${payload};
-          Object.entries(data).forEach(([k, v]) => {
-            if (typeof v === 'string') localStorage.setItem(k, v);
-          });
-          localStorage.setItem('passgen-migrated-to-app-scheme', 'true');
+          const data = {};
+          Object.keys(localStorage)
+            .filter(k => k.startsWith('passgen-'))
+            .forEach((k) => { data[k] = localStorage.getItem(k); });
+          return data;
         })()
       `)
-      mainWindow.webContents.reload()
-    } else {
-      await mainWindow.webContents.executeJavaScript(`
-        localStorage.setItem('passgen-migrated-to-app-scheme', 'true')
-      `)
+      return legacyData && typeof legacyData === 'object' ? (legacyData as Record<string, string>) : {}
+    } finally {
+      legacyWindow.destroy()
     }
-  } finally {
-    legacyWindow.destroy()
+  }
+
+  const legacyIndex = path.join(__dirname, '../dist/index.html')
+  const sources: Array<() => Promise<Record<string, string>>> = [
+    () => readFromSource(async (win) => {
+      await win.loadFile(legacyIndex)
+    }),
+    () => readFromSource(async (win) => {
+      await win.loadURL(`${APP_PROTOCOL}://localhost/index.html`)
+    })
+  ]
+
+  let legacyData: Record<string, string> = {}
+  for (const load of sources) {
+    try {
+      legacyData = await load()
+    } catch {
+      legacyData = {}
+    }
+    if (Object.keys(legacyData).length > 0) break
+  }
+
+  if (Object.keys(legacyData).length > 0) {
+    const payload = JSON.stringify(legacyData)
+    await mainWindow.webContents.executeJavaScript(`
+      (() => {
+        const data = ${payload};
+        Object.entries(data).forEach(([k, v]) => {
+          if (typeof v === 'string') localStorage.setItem(k, v);
+        });
+        localStorage.setItem('${migrationKey}', 'true');
+      })()
+    `)
+    mainWindow.webContents.reload()
+  } else {
+    await mainWindow.webContents.executeJavaScript(`
+      localStorage.setItem('${migrationKey}', 'true')
+    `)
   }
 }
 
@@ -696,8 +726,21 @@ if (!gotTheLock) {
   // Note: partition: 'persist:passgen' in BrowserWindow webPreferences
   // automatically persists localStorage to disk in app userData directory
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     registerAppProtocol()
+    const shouldUseAppServer = app.isPackaged || process.env.PASSGEN_USE_APP_SERVER === 'true'
+    if (shouldUseAppServer) {
+      const started = await startAppServer()
+      if (!started) {
+        dialog.showMessageBox({
+          type: 'warning',
+          title: 'Passkey unavailable',
+          message: 'Failed to start the local app server. Passkey/Windows Hello may not work.',
+          detail: `Port ${APP_SERVER_PORT} is required for passkey support.`,
+          buttons: ['OK']
+        })
+      }
+    }
     if (process.argv.includes('--vault-self-test')) {
       runVaultSelfTests()
         .then(() => app.quit())
@@ -753,6 +796,7 @@ if (!gotTheLock) {
 
 app.on('window-all-closed', () => {
   stopBridgeServer()
+  stopAppServer()
   app.quit();
 })
 
@@ -1192,6 +1236,100 @@ function startBridgeServer() {
   } catch (e) {
     console.error('Bridge server failed to start:', e)
   }
+}
+
+async function startAppServer(): Promise<boolean> {
+  if (appServerReady) return true
+  return await new Promise((resolve) => {
+    try {
+      const distRoot = path.join(__dirname, '../dist')
+      appServer = http.createServer((req, res) => {
+        try {
+          if (!req.url) {
+            res.writeHead(400)
+            res.end('Bad Request')
+            return
+          }
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            res.writeHead(405)
+            res.end('Method Not Allowed')
+            return
+          }
+
+          const requestUrl = new URL(req.url, `http://localhost:${APP_SERVER_PORT}`)
+          let pathname = decodeURIComponent(requestUrl.pathname || '/')
+          if (!pathname || pathname === '/') pathname = '/index.html'
+          const safePath = path.normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, '')
+          let filePath = path.join(distRoot, safePath)
+          if (!filePath.startsWith(distRoot)) {
+            filePath = path.join(distRoot, 'index.html')
+          }
+
+          const fallbackToIndex = () => {
+            const indexPath = path.join(distRoot, 'index.html')
+            fs.readFile(indexPath, (err, data) => {
+              if (err) {
+                res.writeHead(404)
+                res.end('Not Found')
+                return
+              }
+              res.writeHead(200, { 'Content-Type': 'text/html' })
+              res.end(req.method === 'HEAD' ? undefined : data)
+            })
+          }
+
+          fs.stat(filePath, (err, stat) => {
+            if (err || !stat.isFile()) {
+              fallbackToIndex()
+              return
+            }
+            fs.readFile(filePath, (errRead, data) => {
+              if (errRead) {
+                fallbackToIndex()
+                return
+              }
+              const ext = path.extname(filePath).toLowerCase()
+              const mime =
+                ext === '.html' ? 'text/html' :
+                ext === '.js' ? 'application/javascript' :
+                ext === '.css' ? 'text/css' :
+                ext === '.json' ? 'application/json' :
+                ext === '.svg' ? 'image/svg+xml' :
+                ext === '.png' ? 'image/png' :
+                ext === '.ico' ? 'image/x-icon' :
+                'application/octet-stream'
+              res.writeHead(200, { 'Content-Type': mime })
+              res.end(req.method === 'HEAD' ? undefined : data)
+            })
+          })
+        } catch (e) {
+          res.writeHead(500)
+          res.end('Server Error')
+        }
+      })
+
+      appServer.on('error', (err) => {
+        appServerReady = false
+        console.error('[APP SERVER] Failed to start:', err)
+        resolve(false)
+      })
+
+      appServer.listen(APP_SERVER_PORT, '127.0.0.1', () => {
+        appServerReady = true
+        resolve(true)
+      })
+    } catch (e) {
+      appServerReady = false
+      console.error('[APP SERVER] Failed to start:', e)
+      resolve(false)
+    }
+  })
+}
+
+function stopAppServer() {
+  try { appServer?.close() } catch {}
+  appServer = null
+  appServerReady = false
 }
 
 function stopBridgeServer() {

@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import './UpgradeModal.css'
 import './SettingsModal.css'
 import { useI18n } from '../services/i18n'
+import { ConfigStore } from '../services/configStore'
 
 interface SettingsModalProps {
   open: boolean
@@ -9,6 +11,12 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { t, language, setLanguage } = useI18n()
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
+  const [passkeyMessage, setPasskeyMessage] = useState<string | null>(null)
+  const [hasPasskey, setHasPasskey] = useState(() => {
+    const store = new ConfigStore()
+    return !!store.getPasskeyCredential()?.credentialId
+  })
   const openPremiumSignIn = () => {
     onClose()
     window.dispatchEvent(new Event('open-storage-setup'))
@@ -21,49 +29,119 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     onClose()
     window.dispatchEvent(new Event('reset-app'))
   }
+  const handleSetupPasskey = async () => {
+    try {
+      setPasskeyBusy(true)
+      setPasskeyMessage(null)
+      if (!navigator.credentials || !navigator.credentials.create) {
+        alert(t('Passkey is not supported on this device or browser'))
+        return
+      }
+      const protocol = window.location.protocol
+      const host = window.location.hostname
+      const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '[::1]'
+      const isAllowedOrigin = protocol === 'https:' || (protocol === 'http:' && isLocalhost)
+      if (!window.isSecureContext || !isAllowedOrigin) {
+        alert(t('Passkey requires a secure context. This feature is not available in this mode.'))
+        return
+      }
+
+      const challenge = crypto.getRandomValues(new Uint8Array(32))
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: 'PassGen' },
+          user: {
+            id: crypto.getRandomValues(new Uint8Array(16)),
+            name: 'passgen-user',
+            displayName: 'PassGen User'
+          },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+          timeout: 60000,
+          attestation: 'none'
+        }
+      })
+
+      if (!credential) {
+        alert(t('Passkey registration cancelled'))
+        return
+      }
+      if (credential.type !== 'public-key') {
+        alert(t('Invalid credential type received'))
+        return
+      }
+
+      const store = new ConfigStore()
+      store.setPasskeyCredential(credential.id, 'passkey-registered')
+      setHasPasskey(true)
+      setPasskeyMessage(t('Passkey setup successful! You can now unlock with your biometric.'))
+    } catch (e) {
+      const errorMsg = (e as Error).message
+      if (errorMsg.includes('cancel') || errorMsg.includes('dismissed')) {
+        alert(t('Passkey setup cancelled'))
+      } else {
+        alert(t('Passkey setup failed: {{message}}', { message: errorMsg }))
+      }
+    } finally {
+      setPasskeyBusy(false)
+    }
+  }
   if (!open) return null
+  const passkeyStatus = passkeyMessage || (hasPasskey ? t('Passkey setup successful! You can now unlock with your biometric.') : null)
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal settings-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal settings-modal modal-scroll" onClick={(e) => e.stopPropagation()}>
         <h2>{t('Settings')}</h2>
-        <div className="settings-section">
-          <label htmlFor="app-language">{t('Language')}</label>
-          <select
-            id="app-language"
-            value={language}
-            onChange={(e) => setLanguage(e.target.value as 'en' | 'ar')}
-          >
-            <option value="en">{t('English')}</option>
-            <option value="ar">{t('Arabic')}</option>
-          </select>
-        </div>
-        <div className="settings-section">
-          <label>{t('Premium Access')}</label>
-          <div className="settings-premium-card">
-            <div className="settings-premium-option">
-              <div className="settings-premium-title">{t('Already Premium?')}</div>
-              <div className="settings-premium-sub">{t('Sign in with Google to unlock cloud storage.')}</div>
-              <button className="btn-secondary settings-google-btn" onClick={openPremiumSignIn}>
-                <img src="./google-g.svg" alt="Google" />
-                {t('Continue with Google')}
-              </button>
-            </div>
-            <div className="settings-premium-option">
-              <div className="settings-premium-title">{t('Become Premium')}</div>
-              <div className="settings-premium-sub">{t('Request activation after payment to unlock Premium.')}</div>
-              <button className="btn-secondary" onClick={openPremiumUpgrade}>
-                {t('Request Activation')}
-              </button>
+        <div className="settings-grid">
+          <div className="settings-section settings-section--full">
+            <label htmlFor="app-language">{t('Language')}</label>
+            <select
+              id="app-language"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as 'en' | 'ar')}
+            >
+              <option value="en">{t('English')}</option>
+              <option value="ar">{t('Arabic')}</option>
+            </select>
+          </div>
+          <div className="settings-section settings-section--full">
+            <label>{t('Premium Access')}</label>
+            <div className="settings-premium-card">
+              <div className="settings-premium-option">
+                <div className="settings-premium-title">{t('Already Premium?')}</div>
+                <div className="settings-premium-sub">{t('Sign in with Google to unlock cloud storage.')}</div>
+                <button className="btn-secondary settings-google-btn" onClick={openPremiumSignIn}>
+                  <img src="./google-g.svg" alt="Google" />
+                  {t('Continue with Google')}
+                </button>
+              </div>
+              <div className="settings-premium-option">
+                <div className="settings-premium-title">{t('Become Premium')}</div>
+                <div className="settings-premium-sub">{t('Request activation after payment to unlock Premium.')}</div>
+                <button className="btn-secondary" onClick={openPremiumUpgrade}>
+                  {t('Request Activation')}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="settings-section">
-          <label>{t('Reset App')}</label>
-          <div className="settings-reset-card">
-            <div className="settings-premium-sub">{t('Clear local data and restart wizard')}</div>
-            <button className="settings-danger-btn" onClick={handleResetApp}>
-              {t('Reset App')}
-            </button>
+          <div className="settings-section">
+            <label>{t('Setup Passkey')}</label>
+            <div className="settings-passkey-card">
+              <div className="settings-premium-sub">{t('Unlock with Passkey')}</div>
+              <button className="btn-secondary" onClick={handleSetupPasskey} disabled={passkeyBusy}>
+                {passkeyBusy ? t('Connecting...') : t('Setup Passkey')}
+              </button>
+              {passkeyStatus && <div className="settings-passkey-status">{passkeyStatus}</div>}
+            </div>
+          </div>
+          <div className="settings-section">
+            <label>{t('Reset App')}</label>
+            <div className="settings-reset-card">
+              <div className="settings-premium-sub">{t('Clear local data and restart wizard')}</div>
+              <button className="settings-danger-btn" onClick={handleResetApp}>
+                {t('Reset App')}
+              </button>
+            </div>
           </div>
         </div>
         <div className="actions">

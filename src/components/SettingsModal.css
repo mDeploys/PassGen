@@ -38,6 +38,20 @@
   background: #fff;
 }
 
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.settings-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #6d28d9;
+}
+
 .settings-premium-card {
   display: grid;
   gap: 10px;
@@ -78,6 +92,7 @@
   color: #4338ca;
 }
 
+
 .settings-reset-card {
   border: 1px dashed #f3b4b4;
   border-radius: 8px;
@@ -116,6 +131,10 @@
 
 html[dir="rtl"] .settings-section {
   text-align: right;
+}
+
+html[dir="rtl"] .settings-toggle {
+  flex-direction: row-reverse;
 }
 
 @media (max-width: 640px) {

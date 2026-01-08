@@ -5,6 +5,8 @@ import { ConfigStore } from '../services/configStore'
 import './StorageSetup.css'
 import { useI18n } from '../services/i18n'
 
+const googleIconUrl = new URL('../assets/google-g.svg', import.meta.url).href
+
 interface StorageSetupProps {
   open: boolean
   onClose: () => void
@@ -50,6 +52,19 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
   const [s3TestResult, setS3TestResult] = useState<string | null>(null)
   const allowGoogle = planTier === 'cloud' || planTier === 'byos'
   const allowS3 = planTier === 'byos'
+  const [supabaseConfig, setSupabaseConfig] = useState(() => {
+    const store = new ConfigStore()
+    return {
+      projectUrl: '',
+      bucket: 'passgen-vault',
+      pathPrefix: `vaults/${store.getInstallId()}`,
+      anonKey: '',
+      authMode: 'anon' as 'anon' | 'oauth'
+    }
+  })
+  const [supabaseTesting, setSupabaseTesting] = useState(false)
+  const [supabaseTestResult, setSupabaseTestResult] = useState<string | null>(null)
+  const allowSupabase = planTier === 'byos'
 
   useEffect(() => {
     if (!open) return
@@ -159,6 +174,8 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
     setGoogleError(null)
     setAuthError(null)
     setLicenseError(null)
+    setS3TestResult(null)
+    setSupabaseTestResult(null)
   }, [open, provider])
 
   const formatLicenseError = (error: unknown) => {
@@ -180,6 +197,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
   const normalizePlan = (plan?: string, isPremium?: boolean): PremiumTier => {
     const raw = String(plan || '').toLowerCase()
     if (raw === 'pro' || raw === 'cloud' || raw === 'byos') return raw
+    if (raw === 'power') return 'byos'
     return isPremium ? 'cloud' : 'free'
   }
 
@@ -193,6 +211,10 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
       window.dispatchEvent(new Event('open-upgrade'))
       return
     }
+    if (next === 'supabase' && !allowSupabase) {
+      window.dispatchEvent(new Event('open-upgrade'))
+      return
+    }
     setProvider(next)
   }
 
@@ -202,6 +224,10 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
       return
     }
     if (provider === 's3-compatible' && !allowS3) {
+      window.dispatchEvent(new Event('open-upgrade'))
+      return
+    }
+    if (provider === 'supabase' && !allowSupabase) {
       window.dispatchEvent(new Event('open-upgrade'))
       return
     }
@@ -359,6 +385,27 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
     }
   }
 
+  const handleTestSupabase = async () => {
+    const api = (window as any).electronAPI
+    if (!api?.storageSupabaseTest) {
+      setSupabaseTestResult(t('Vault backend is not available'))
+      return
+    }
+    if (!supabaseConfig.projectUrl || !supabaseConfig.bucket || (supabaseConfig.authMode === 'anon' && !supabaseConfig.anonKey)) {
+      setSupabaseTestResult(t('Please fill in all required fields first.'))
+      return
+    }
+    try {
+      setSupabaseTesting(true)
+      const result = await api.storageSupabaseTest(supabaseConfig)
+      setSupabaseTestResult(result.ok ? t('Connection successful.') : t('Connection failed: {{message}}', { message: result.error || t('Unknown error') }))
+    } catch (error) {
+      setSupabaseTestResult(t('Connection failed: {{message}}', { message: (error as Error).message }))
+    } finally {
+      setSupabaseTesting(false)
+    }
+  }
+
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -378,10 +425,21 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
       alert(t('Upgrade to BYOS to enable S3-compatible storage.'))
       return
     }
+    if (provider === 'supabase' && !allowSupabase) {
+      alert(t('Upgrade to BYOS to enable Supabase Storage.'))
+      return
+    }
 
     if (provider === 's3-compatible') {
       if (!s3Config.bucket || !s3Config.accessKeyId || !s3Config.secretAccessKey || !s3Config.region) {
         alert(t('Please complete all required S3 fields.'))
+        return
+      }
+    }
+
+    if (provider === 'supabase') {
+      if (!supabaseConfig.projectUrl || !supabaseConfig.bucket || (supabaseConfig.authMode === 'anon' && !supabaseConfig.anonKey)) {
+        alert(t('Please complete all required Supabase fields.'))
         return
       }
     }
@@ -404,6 +462,16 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
         accessKeyId: s3Config.accessKeyId,
         secretAccessKey: s3Config.secretAccessKey,
         pathPrefix: s3Config.pathPrefix || undefined
+      }
+    }
+
+    if (provider === 'supabase') {
+      config.supabase = {
+        projectUrl: supabaseConfig.projectUrl,
+        bucket: supabaseConfig.bucket,
+        anonKey: supabaseConfig.anonKey,
+        pathPrefix: supabaseConfig.pathPrefix || undefined,
+        authMode: supabaseConfig.authMode
       }
     }
 
@@ -450,7 +518,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                         </>
                       ) : (
                         <button type="button" className="secondary-btn premium-google-btn" onClick={handleAuthLogin} disabled={authBusy}>
-                          <img src="./google-g.svg" alt="Google" />
+                          <img src={googleIconUrl} alt="Google" />
                           {authBusy ? t('Connecting...') : t('Continue with Google')}
                         </button>
                       )}
@@ -481,10 +549,10 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
               </div>
               {import.meta.env.DEV && (
                 <div className="help-text subtle">
-                  {`signedIn=${!!appAccount?.email} `}
-                  {`meStatus=${licenseStatus ? `${licenseStatus.email || '-'} / ${licenseStatus.plan || '-'} / ${licenseStatus.isPremium ? 'premium' : 'free'}` : 'none'} `}
-                  {`lastLicenseError=${licenseError || 'none'} `}
-                  {`planTier=${planTier} allowGoogle=${allowGoogle} allowS3=${allowS3}`}
+                {`signedIn=${!!appAccount?.email} `}
+                {`meStatus=${licenseStatus ? `${licenseStatus.email || '-'} / ${licenseStatus.plan || '-'} / ${licenseStatus.isPremium ? 'premium' : 'free'}` : 'none'} `}
+                {`lastLicenseError=${licenseError || 'none'} `}
+                  {`planTier=${planTier} allowGoogle=${allowGoogle} allowS3=${allowS3} allowSupabase=${allowSupabase}`}
                 </div>
               )}
             <div className="provider-selection">
@@ -541,6 +609,25 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                     <span className="provider-badge advanced">{t('Advanced')}</span>
                   </div>
                   <span>{t('Use AWS, R2, Wasabi, Spaces, MinIO, or custom endpoints')}</span>
+                </div>
+              </label>
+
+              <label className={`provider-option ${!allowSupabase ? 'disabled' : ''}`} onClick={() => handleProviderSelect('supabase')}>
+                <input
+                  type="radio"
+                  name="provider"
+                  value="supabase"
+                  checked={provider === 'supabase'}
+                  onChange={() => handleProviderSelect('supabase')}
+                  disabled={!allowSupabase}
+                />
+                <img src="./supabase.svg" alt="Supabase" className="provider-icon" />
+                <div className="provider-info">
+                  <div className="provider-title">
+                    <strong>{t('Supabase Storage')}</strong>
+                    <span className="provider-badge advanced">{t('Advanced')}</span>
+                  </div>
+                  <span>{t('Use your Supabase Storage for encrypted snapshots')}</span>
                 </div>
               </label>
 
@@ -788,6 +875,90 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                     </button>
                     {s3TestResult && <span className="test-result">{s3TestResult}</span>}
                   </div>
+                </>
+              )}
+
+              {provider === 'supabase' && (
+                <>
+                  <h3>{t('Supabase Storage')}</h3>
+                  <div className="form-group">
+                    <label>{t('Project URL')}</label>
+                    <input
+                      type="text"
+                      value={supabaseConfig.projectUrl}
+                      onChange={(e) => setSupabaseConfig(prev => ({ ...prev, projectUrl: e.target.value.trim() }))}
+                      placeholder="https://your-project.supabase.co"
+                      required
+                      className="ltr-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{t('Bucket')}</label>
+                    <input
+                      type="text"
+                      value={supabaseConfig.bucket}
+                      onChange={(e) => setSupabaseConfig(prev => ({ ...prev, bucket: e.target.value }))}
+                      placeholder="passgen-vault"
+                      required
+                      className="ltr-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{t('Path Prefix (optional)')}</label>
+                    <input
+                      type="text"
+                      value={supabaseConfig.pathPrefix}
+                      onChange={(e) => setSupabaseConfig(prev => ({ ...prev, pathPrefix: e.target.value }))}
+                      placeholder={supabaseConfig.pathPrefix}
+                      className="ltr-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{t('Auth Mode')}</label>
+                    <div className="auth-toggle">
+                      <label className="auth-toggle-option disabled">
+                        <input type="radio" name="supabase-auth" checked={supabaseConfig.authMode === 'oauth'} readOnly disabled />
+                        <span>{t('Sign in with Supabase (recommended)')}</span>
+                        <span className="toggle-pill">{t('Coming soon')}</span>
+                      </label>
+                      <label className="auth-toggle-option">
+                        <input
+                          type="radio"
+                          name="supabase-auth"
+                          checked={supabaseConfig.authMode === 'anon'}
+                          onChange={() => setSupabaseConfig(prev => ({ ...prev, authMode: 'anon' }))}
+                        />
+                        <span>{t('Paste anon key (advanced)')}</span>
+                      </label>
+                    </div>
+                  </div>
+                  {supabaseConfig.authMode === 'anon' && (
+                    <div className="form-group">
+                      <label>{t('Anon key')}</label>
+                      <input
+                        type="password"
+                        value={supabaseConfig.anonKey}
+                        onChange={(e) => setSupabaseConfig(prev => ({ ...prev, anonKey: e.target.value }))}
+                        placeholder="eyJhbGciOi..."
+                        required
+                        className="ltr-input"
+                      />
+                    </div>
+                  )}
+                  <div className="inline-row">
+                    <button type="button" className="secondary-btn" onClick={handleTestSupabase} disabled={supabaseTesting || !allowSupabase}>
+                      {supabaseTesting ? t('Testing...') : t('Test Connection')}
+                    </button>
+                    {supabaseTestResult && <span className="test-result">{supabaseTestResult}</span>}
+                  </div>
+                  {!allowSupabase && (
+                    <div className="upgrade-inline">
+                      <p className="help-text error-text">{t('Upgrade to BYOS to enable Supabase Storage.')}</p>
+                      <button type="button" className="link-btn" onClick={() => window.dispatchEvent(new Event('open-upgrade'))}>
+                        {t('Upgrade')}
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
 

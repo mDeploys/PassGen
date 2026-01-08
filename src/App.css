@@ -141,34 +141,67 @@
 /* Mode Switcher */
 .mode-switcher {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 24px;
-  background: #f0f0f0;
-  padding: 6px;
-  border-radius: 12px;
+  background: linear-gradient(135deg, #f5f3ff 0%, #eef2ff 100%);
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid #e5dbff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .mode-switcher button {
   flex: 1;
-  padding: 12px 24px;
+  padding: 10px 16px;
   background: transparent;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
   cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.2s ease;
+}
+
+.mode-switcher .tab-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #ede9fe;
+  color: #6d28d9;
+  box-shadow: 0 4px 12px rgba(109, 40, 217, 0.15);
   font-size: 1rem;
-  font-weight: 600;
-  color: #666;
-  transition: all 0.3s;
+}
+
+.mode-switcher .tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .mode-switcher button.active {
-  background: white;
-  color: #667eea;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+  color: #4c1d95;
+  border-color: #e9d5ff;
+  box-shadow: 0 8px 22px rgba(76, 29, 149, 0.15);
+}
+
+.mode-switcher button.active .tab-icon {
+  background: linear-gradient(135deg, #6d28d9, #8b5cf6);
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(109, 40, 217, 0.35);
 }
 
 .mode-switcher button:hover:not(.active) {
-  color: #667eea;
+  color: #5b21b6;
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .upgrade-inline-banner {

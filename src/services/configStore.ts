@@ -1,7 +1,7 @@
 // Simple localStorage-based config store
 // No Node.js dependencies - safe for renderer process
 import CryptoJS from 'crypto-js'
-import type { ProviderId, S3CompatibleConfig } from './storageTypes'
+import type { ProviderId, S3CompatibleConfig, SupabaseStorageConfig } from './storageTypes'
 
 export interface StorageConfig {
   provider: ProviderId;
@@ -15,6 +15,7 @@ export interface StorageConfig {
     accountEmail?: string;
   };
   s3Compatible?: S3CompatibleConfig;
+  supabase?: SupabaseStorageConfig;
 }
 
 export class ConfigStore {
@@ -157,5 +158,25 @@ export class ConfigStore {
       config.googleDrive.tokens = tokens;
       this.setStorageConfig(config);
     }
+  }
+
+  private getDevSecretUsageKey(dateKey: string): string {
+    return `passgen-dev-secret-usage-${dateKey}`
+  }
+
+  getDevSecretUsage(dateKey: string): number {
+    const raw = localStorage.getItem(this.getDevSecretUsageKey(dateKey))
+    const parsed = raw ? parseInt(raw, 10) : 0
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  setDevSecretUsage(dateKey: string, count: number): void {
+    localStorage.setItem(this.getDevSecretUsageKey(dateKey), String(count))
+  }
+
+  incrementDevSecretUsage(dateKey: string): number {
+    const next = this.getDevSecretUsage(dateKey) + 1
+    this.setDevSecretUsage(dateKey, next)
+    return next
   }
 }

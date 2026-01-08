@@ -1,16 +1,11 @@
 /// <reference types="vite/client" />
 
-interface PaymentAPI {
-	requestActivation: (payload: { email: string; requestId: string; paymentMethod?: 'paypal' | 'crypto' }) => Promise<{ success: boolean; error?: string }>
-}
-
 interface ClipboardAPI {
 	writeText: (text: string) => void
 }
 
 declare interface Window {
 	electron: {
-		payment: PaymentAPI
 		clipboard: ClipboardAPI
 	}
 	electronAPI?: {
@@ -20,6 +15,17 @@ declare interface Window {
 		authLogout: () => Promise<{ ok: boolean }>
 		licenseGetMe: () => Promise<{ email: string; plan: string; isPremium: boolean }>
 		licenseRedeem: (payload: { licenseKey: string; deviceId?: string }) => Promise<{ isPremium: boolean; plan: string; expiresAt?: string | null }>
+		openExternal: (url: string) => Promise<{ ok: boolean }>
+		settingsGet: () => Promise<{ minimizeToTray: boolean }>
+		settingsSet: (payload: { minimizeToTray?: boolean }) => Promise<{ minimizeToTray: boolean }>
+		storageSupabaseTest: (config: any) => Promise<{ ok: boolean; error?: string }>
+		storageSupabaseUpload: (config: any, data: string, retainCount?: number) => Promise<{ versionId: string }>
+		storageSupabaseDownload: (config: any, versionId?: string) => Promise<string>
+		storageSupabaseListVersions: (config: any) => Promise<any[]>
+		storageSupabaseRestoreVersion: (config: any, versionId: string) => Promise<string>
+		devSecretGenerate: () => Promise<{ base64Url: string; hex: string }>
+		devSecretSelectProject: () => Promise<{ success: boolean; folder?: string; hasEnv?: boolean; envPath?: string }>
+		devSecretInjectEnv: (payload: { folder: string; key: string; value: string }) => Promise<{ success: boolean; envPath?: string; updated?: boolean; created?: boolean }>
 		onAuthUpdated: (handler: (session: any) => void) => () => void
 	}
 }

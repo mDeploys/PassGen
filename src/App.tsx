@@ -14,6 +14,7 @@ import { ConfigStore } from './services/configStore'
 import { applyRemoteLicense, getPremiumTier } from './services/license'
 import { useI18n } from './services/i18n'
 import SettingsModal from './components/SettingsModal'
+import DeveloperTab from './components/DeveloperTab'
 
 interface PasswordOptions {
   length: number
@@ -23,7 +24,7 @@ interface PasswordOptions {
   symbols: boolean
 }
 
-type AppMode = 'onboarding' | 'setup' | 'auth' | 'generator' | 'vault'
+type AppMode = 'onboarding' | 'setup' | 'auth' | 'generator' | 'vault' | 'developer'
 
 function App() {
   const [showSplash, setShowSplash] = useState(true)
@@ -373,6 +374,9 @@ function App() {
     return <Onboarding onComplete={handleOnboardingComplete} />
   }
 
+  const showTabs = mode === 'vault' || mode === 'generator' || mode === 'developer'
+  const showUpgradeBanner = !isPremium && (mode === 'vault' || mode === 'generator')
+
   return (
     <div className="app">
       <CustomTitleBar />
@@ -444,55 +448,46 @@ function App() {
           </div>
         )}
 
-        {mode === 'vault' && (
+        {showTabs && (
           <>
             <div className="mode-switcher">
               <button
                 onClick={() => setMode('vault')}
-                className="active"
+                className={mode === 'vault' ? 'active' : ''}
               >
-                🗄️ {t('Vault')}
+                <span className="tab-icon" aria-hidden="true">🗄️</span>
+                <span className="tab-label">{t('Vault')}</span>
               </button>
               <button
                 onClick={() => setMode('generator')}
-                className=""
+                className={mode === 'generator' ? 'active' : ''}
               >
-                🔧 {t('Generator')}
+                <span className="tab-icon" aria-hidden="true">🔧</span>
+                <span className="tab-label">{t('Generator')}</span>
+              </button>
+              <button
+                onClick={() => setMode('developer')}
+                className={mode === 'developer' ? 'active' : ''}
+              >
+                <span className="tab-icon" aria-hidden="true">🧩</span>
+                <span className="tab-label">{t('Developer')}</span>
               </button>
             </div>
-            {!isPremium && (
+            {showUpgradeBanner && (
               <div className="upgrade-inline-banner">
                 <span>{t('Free plan: 4 passwords. Upgrade to unlock unlimited entries and sync.')}</span>
                 <button className="upgrade-inline-btn" onClick={() => setShowUpgrade(true)}>⭐ {t('Upgrade')}</button>
               </div>
             )}
-            <PasswordVault storageManager={storageManager} onGenerateNew={switchToGenerator} />
           </>
+        )}
+
+        {mode === 'vault' && (
+          <PasswordVault storageManager={storageManager} onGenerateNew={switchToGenerator} />
         )}
 
         {mode === 'generator' && (
           <>
-            <div className="mode-switcher">
-              <button
-                onClick={() => setMode('vault')}
-                className=""
-              >
-                🗄️ {t('Vault')}
-              </button>
-              <button
-                onClick={() => setMode('generator')}
-                className="active"
-              >
-                🔧 {t('Generator')}
-              </button>
-            </div>
-            {!isPremium && (
-              <div className="upgrade-inline-banner">
-                <span>{t('Free plan: 4 passwords. Upgrade to unlock unlimited entries and sync.')}</span>
-                <button className="upgrade-inline-btn" onClick={() => setShowUpgrade(true)}>⭐ {t('Upgrade')}</button>
-              </div>
-            )}
-            
             <h1>🔐 PassGen</h1>
             <p className="subtitle">{t('Generate Secure Passwords')}</p>
 
@@ -573,6 +568,8 @@ function App() {
             </button>
           </>
         )}
+
+        {mode === 'developer' && <DeveloperTab />}
       </div>
       <AppFooter />
       <UpgradeModal open={showUpgrade} onClose={()=>setShowUpgrade(false)} />

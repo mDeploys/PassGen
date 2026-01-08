@@ -1,5 +1,7 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, dialog, clipboard, protocol, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Menu, dialog, clipboard, protocol, safeStorage, Tray, nativeImage } from 'electron'
+import Store from 'electron-store'
 import * as http from 'http'
+import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
 // Load environment variables from .env (dev + packaged extraResources)
@@ -50,6 +52,19 @@ let sessionToken: string | null = null;
 let bridgeServer: http.Server | null = null;  // HTTP server for extension bridge (all modes)
 let appServer: http.Server | null = null; // Local app server for WebAuthn-safe origin
 let appServerReady = false;
+let tray: Tray | null = null;
+let isQuitting = false;
+
+type AppSettings = {
+  minimizeToTray: boolean
+}
+
+const appSettingsStore = new Store<AppSettings>({
+  name: 'passgen-app-settings',
+  defaults: {
+    minimizeToTray: true
+  }
+})
 const APP_SERVER_PORT = Number(process.env.PASSGEN_APP_SERVER_PORT) || 17864;
 const vaultRepository = new VaultRepository()
 const PASSKEY_SERVICE = 'passgen-vault-key'
@@ -65,6 +80,73 @@ function getKeytarModule(): any | null {
     keytarModule = null
   }
   return keytarModule
+}
+
+function toBase64Url(buffer: Buffer): string {
+  return buffer
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function getMinimizeToTraySetting(): boolean {
+  return appSettingsStore.get('minimizeToTray') !== false
+}
+
+function getTrayIconPath(): string | null {
+  const candidates = [
+    path.join(app.getAppPath(), 'dist', 'icon.png'),
+    path.join(app.getAppPath(), 'public', 'icon.png'),
+    path.join(process.cwd(), 'dist', 'icon.png'),
+    path.join(process.cwd(), 'public', 'icon.png'),
+    path.join(process.cwd(), 'build', 'icon.png')
+  ]
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+function showFromTray() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.show()
+  mainWindow.setSkipTaskbar(false)
+  mainWindow.focus()
+}
+
+function createTray(): boolean {
+  if (tray) return true
+  const iconPath = getTrayIconPath()
+  if (!iconPath) {
+    console.warn('[TRAY] icon not found, tray disabled')
+    return false
+  }
+  const icon = nativeImage.createFromPath(iconPath)
+  tray = new Tray(icon)
+  tray.setToolTip('PassGen')
+  tray.on('click', showFromTray)
+  tray.on('double-click', showFromTray)
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show PassGen', click: showFromTray },
+    { label: 'Minimize to Tray', click: () => minimizeToTray() },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() }
+  ]))
+  return true
+}
+
+function minimizeToTray(): boolean {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  const created = createTray()
+  if (!created || !tray) return false
+  mainWindow.hide()
+  mainWindow.setSkipTaskbar(true)
+  return true
 }
 
 async function storePasskeyVaultKey(installId: string): Promise<void> {
@@ -396,6 +478,7 @@ function setApplicationMenu() {
           label: 'Window',
           submenu: [
             { role: 'minimize' },
+            { label: 'Minimize to Tray', click: minimizeToTray },
             { role: 'zoom' },
             { role: 'close' }
           ]
@@ -482,6 +565,7 @@ function buildDefaultMenu() {
       label: 'Window',
       submenu: [
         { role: 'minimize' },
+        { label: 'Minimize to Tray', click: minimizeToTray },
         { role: 'zoom' },
         { role: 'close' }
       ]
@@ -609,6 +693,20 @@ function createWindow() {
     const appUrl = `${APP_PROTOCOL}://localhost/index.html`
     mainWindow.loadURL(appUrl)
   }
+
+  mainWindow.on('minimize', (event) => {
+    if (isQuitting) return
+    if (!getMinimizeToTraySetting()) return
+    const hidden = minimizeToTray()
+    if (hidden) event.preventDefault()
+  })
+
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return
+    if (!getMinimizeToTraySetting()) return
+    const hidden = minimizeToTray()
+    if (hidden) event.preventDefault()
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -777,6 +875,32 @@ ipcMain.on('help:about', () => {
   showAboutDialog()
 })
 
+ipcMain.handle('app:openExternal', async (_event, url: string) => {
+  if (!url || typeof url !== 'string') {
+    throw new Error('Missing URL')
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error('Invalid URL')
+  }
+  await shell.openExternal(url)
+  return { ok: true }
+})
+
+ipcMain.handle('settings:get', async () => {
+  return {
+    minimizeToTray: getMinimizeToTraySetting()
+  }
+})
+
+ipcMain.handle('settings:set', async (_event, payload: { minimizeToTray?: boolean }) => {
+  if (typeof payload?.minimizeToTray === 'boolean') {
+    appSettingsStore.set('minimizeToTray', payload.minimizeToTray)
+  }
+  return {
+    minimizeToTray: getMinimizeToTraySetting()
+  }
+})
+
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -884,67 +1008,11 @@ app.on('window-all-closed', () => {
   app.quit();
 })
 
-// Handle payment activation request
-ipcMain.handle('payment:requestActivation', async (_event, payload: { email: string; requestId: string; paymentMethod?: 'paypal' | 'crypto' }) => {
-  try {
-    const defaultSupabaseUrl = 'https://ylzxeyqlqvziwnradcmy.supabase.co'
-    const defaultSupabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsenhleXFscXZ6aXducmFkY215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NjIzMTAsImV4cCI6MjA4MTAzODMxMH0.e-0bhGJnlEC_hJ-DUiICu9KoZ0753bSp4QaIuamNG7o'
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || defaultSupabaseUrl
-    const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || defaultSupabaseKey
-
-    try {
-      const response = await fetch(`${supabaseUrl}/functions/v1/activation-request`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`
-        },
-        body: JSON.stringify({
-          install_id: payload.requestId,
-          user_email: payload.email,
-          payment_method: payload.paymentMethod || 'paypal',
-          payment_amount: 15.00
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`)
-      }
-
-      console.log('[PAYMENT] Activation request saved via Edge Function')
-      return { success: true }
-    } catch (apiError) {
-      console.error('[PAYMENT] Edge Function error:', apiError)
-      // Fallback to direct Supabase insertion if Edge Function fails
-      try {
-        const { createClient } = await import('@supabase/supabase-js')
-        const supabase = createClient(supabaseUrl, supabaseKey)
-
-        const { error } = await supabase
-          .from('activation_requests')
-          .insert({
-            install_id: payload.requestId,
-            user_email: payload.email,
-            payment_method: payload.paymentMethod || 'paypal',
-            payment_amount: 15.00,
-            payment_currency: 'USD',
-            status: 'pending'
-          })
-
-        if (error) {
-          throw error
-        }
-
-        console.log('[PAYMENT] Activation request saved via Supabase client fallback')
-        return { success: true }
-      } catch (fallbackError) {
-        console.error('[PAYMENT] Fallback save error:', fallbackError)
-        return { success: false, error: 'Failed to send activation request. Please try again later.' }
-      }
-    }
-  } catch (err) {
-    console.error('[PAYMENT] Activation request failed:', err)
-    return { success: false, error: 'Failed to send activation request. Please try again later.' }
+app.on('before-quit', () => {
+  isQuitting = true
+  if (tray) {
+    tray.destroy()
+    tray = null
   }
 })
 
@@ -964,6 +1032,78 @@ ipcMain.handle('clipboard:readText', async () => {
   } catch {
     return ''
   }
+})
+
+console.log('[DEV SECRET] Registering handler dev-secret:generate')
+ipcMain.handle('dev-secret:generate', async () => {
+  const bytes = crypto.randomBytes(32)
+  return {
+    base64Url: toBase64Url(bytes),
+    hex: bytes.toString('hex')
+  }
+})
+
+console.log('[DEV SECRET] Registering handler dev-secret:selectProject')
+ipcMain.handle('dev-secret:selectProject', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select Project Folder',
+    properties: ['openDirectory']
+  })
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false }
+  }
+  const folder = result.filePaths[0]
+  const envPath = path.join(folder, '.env')
+  const hasEnv = fs.existsSync(envPath)
+  return { success: true, folder, hasEnv, envPath }
+})
+
+console.log('[DEV SECRET] Registering handler dev-secret:injectEnv')
+ipcMain.handle('dev-secret:injectEnv', async (_event, payload: { folder: string; key: string; value: string }) => {
+  const folder = String(payload?.folder || '').trim()
+  const key = String(payload?.key || '').trim()
+  const value = String(payload?.value || '')
+  if (!folder) {
+    throw new Error('Missing project folder')
+  }
+  if (!key) {
+    throw new Error('Missing key name')
+  }
+
+  const envPath = path.join(folder, '.env')
+  let content = ''
+  let existed = false
+  try {
+    content = await fs.promises.readFile(envPath, 'utf8')
+    existed = true
+  } catch {
+    content = ''
+  }
+
+  const normalized = content.replace(/\r\n/g, '\n')
+  const lines = normalized ? normalized.split('\n') : []
+  if (lines.length && lines[lines.length - 1] === '') {
+    lines.pop()
+  }
+
+  const matcher = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`)
+  let updated = false
+  const nextLines = lines.map((line) => {
+    if (matcher.test(line)) {
+      updated = true
+      return `${key}=${value}`
+    }
+    return line
+  })
+
+  if (!updated) {
+    nextLines.push(`${key}=${value}`)
+  }
+
+  const output = `${nextLines.join('\n')}\n`
+  await fs.promises.writeFile(envPath, output, 'utf8')
+
+  return { success: true, envPath, updated, created: !existed }
 })
 
 // Expose current session token to renderer (read-only)
@@ -1188,6 +1328,29 @@ ipcMain.handle('storage:testS3', async (_event, config) => {
 
 ipcMain.handle('storage:s3SignedRequest', async (_event, config, key: string) => {
   return vaultRepository.getSignedS3Request(config, key)
+})
+
+ipcMain.handle('storage:supabaseTest', async (_event, config) => {
+  return vaultRepository.testSupabaseConnection(config)
+})
+
+ipcMain.handle('storage:supabaseUpload', async (_event, config, data: string | Buffer, retainCount: number) => {
+  const payload = Buffer.isBuffer(data) ? data : Buffer.from(String(data ?? ''), 'utf8')
+  return vaultRepository.uploadSupabaseSnapshot(config, payload, retainCount || 10)
+})
+
+ipcMain.handle('storage:supabaseDownload', async (_event, config, versionId?: string) => {
+  const data = await vaultRepository.downloadSupabaseSnapshot(config, versionId)
+  return data.toString('utf8')
+})
+
+ipcMain.handle('storage:supabaseListVersions', async (_event, config) => {
+  return vaultRepository.listSupabaseVersions(config)
+})
+
+ipcMain.handle('storage:supabaseRestoreVersion', async (_event, config, versionId: string) => {
+  const data = await vaultRepository.restoreSupabaseVersion(config, versionId)
+  return data.toString('utf8')
 })
 
 ipcMain.handle('oauth:google', async () => {

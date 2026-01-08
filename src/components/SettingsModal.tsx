@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './UpgradeModal.css'
 import './SettingsModal.css'
 import { useI18n } from '../services/i18n'
 import { ConfigStore } from '../services/configStore'
+
+const googleIconUrl = new URL('../assets/google-g.svg', import.meta.url).href
 
 interface SettingsModalProps {
   open: boolean
@@ -17,6 +19,20 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     const store = new ConfigStore()
     return !!store.getPasskeyCredential()?.credentialId
   })
+  const [minimizeToTray, setMinimizeToTray] = useState(true)
+
+  useEffect(() => {
+    if (!open) return
+    const api = (window as any).electronAPI
+    if (!api?.settingsGet) return
+    api.settingsGet()
+      .then((result: any) => {
+        if (typeof result?.minimizeToTray === 'boolean') {
+          setMinimizeToTray(result.minimizeToTray)
+        }
+      })
+      .catch(() => {})
+  }, [open])
   const openPremiumSignIn = () => {
     onClose()
     window.dispatchEvent(new Event('open-storage-setup'))
@@ -93,6 +109,19 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       setPasskeyBusy(false)
     }
   }
+  const handleMinimizeToTrayChange = async (value: boolean) => {
+    setMinimizeToTray(value)
+    const api = (window as any).electronAPI
+    if (!api?.settingsSet) return
+    try {
+      const result = await api.settingsSet({ minimizeToTray: value })
+      if (typeof result?.minimizeToTray === 'boolean') {
+        setMinimizeToTray(result.minimizeToTray)
+      }
+    } catch {
+      setMinimizeToTray(!value)
+    }
+  }
   if (!open) return null
   const passkeyStatus = passkeyMessage || (hasPasskey ? t('Passkey setup successful! You can now unlock with your biometric.') : null)
   return (
@@ -112,13 +141,24 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             </select>
           </div>
           <div className="settings-section settings-section--full">
+            <label>{t('Minimize to tray')}</label>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={minimizeToTray}
+                onChange={(e) => handleMinimizeToTrayChange(e.target.checked)}
+              />
+              <span>{t('Keep PassGen running in the tray when you close the window.')}</span>
+            </label>
+          </div>
+          <div className="settings-section settings-section--full">
             <label>{t('Premium Access')}</label>
             <div className="settings-premium-card">
               <div className="settings-premium-option">
                 <div className="settings-premium-title">{t('Already Premium?')}</div>
                 <div className="settings-premium-sub">{t('Sign in with Google to unlock cloud storage.')}</div>
                 <button className="btn-secondary settings-google-btn" onClick={openPremiumSignIn}>
-                  <img src="./google-g.svg" alt="Google" />
+                  <img src={googleIconUrl} alt="Google" />
                   {t('Continue with Google')}
                 </button>
               </div>

@@ -2,6 +2,12 @@ import { ConfigStore } from './configStore'
 import type { ProviderId } from './storageTypes'
 
 export type PremiumTier = 'free' | 'pro' | 'cloud' | 'byos'
+export interface PlanCapabilities {
+  canUseDevTools: boolean
+  canInjectEnv: boolean
+  canSeeHex: boolean
+  dailyGenLimit: number | null
+}
 
 export function isPremiumEnabled(): boolean {
   const store = new ConfigStore()
@@ -25,7 +31,7 @@ export function isProviderAllowed(provider: ProviderId, tier: PremiumTier): bool
     return tier === 'cloud' || tier === 'byos'
   }
 
-  if (provider === 's3-compatible') {
+  if (provider === 's3-compatible' || provider === 'supabase') {
     return tier === 'byos'
   }
 
@@ -41,7 +47,8 @@ export function applyRemoteLicense(payload: { isPremium: boolean; plan?: string;
   if (payload?.isPremium) {
     const expiresAt = payload.expiresAt ? new Date(payload.expiresAt) : undefined
     store.setPremium(true, expiresAt)
-    const plan = String(payload.plan || '').toLowerCase()
+    const planRaw = String(payload.plan || '').toLowerCase()
+    const plan = planRaw === 'power' ? 'byos' : planRaw
     const allowed = ['free', 'pro', 'cloud', 'byos']
     localStorage.setItem('passgen-premium-tier', allowed.includes(plan) ? plan : 'cloud')
   } else {
@@ -51,5 +58,30 @@ export function applyRemoteLicense(payload: { isPremium: boolean; plan?: string;
   const api = (window as any)?.electronAPI
   if (api?.emit) {
     api.emit('premium:changed')
+  }
+}
+
+export function getPlanCapabilities(plan?: string | PremiumTier): PlanCapabilities {
+  const normalized = String(plan || getPremiumTier()).toLowerCase()
+  const tier: PremiumTier =
+    normalized === 'pro' ? 'pro' :
+    normalized === 'cloud' ? 'cloud' :
+    normalized === 'byos' || normalized === 'power' ? 'byos' :
+    'free'
+
+  if (tier === 'free') {
+    return {
+      canUseDevTools: true,
+      canInjectEnv: false,
+      canSeeHex: false,
+      dailyGenLimit: 3
+    }
+  }
+
+  return {
+    canUseDevTools: true,
+    canInjectEnv: true,
+    canSeeHex: true,
+    dailyGenLimit: null
   }
 }

@@ -12,7 +12,9 @@ import type {
   VaultFileHeader,
   GoogleDriveProviderConfig,
   S3CompatibleProviderConfig,
-  AppAccountSession
+  SupabaseStorageProviderConfig,
+  AppAccountSession,
+  ProviderVersion
 } from './types'
 import {
   createNewVaultFile,
@@ -26,6 +28,7 @@ import { getActiveProviderId, getLocalVaultPath, setActiveProviderId, setLocalVa
 import { LocalProvider } from './providers/localProvider'
 import { GoogleDriveProvider, type GoogleOAuthConfig } from './providers/googleDriveProvider'
 import { S3CompatibleProvider } from './providers/s3CompatibleProvider'
+import { SupabaseStorageProvider } from './providers/supabaseStorageProvider'
 import { DropboxProvider } from './providers/dropboxProvider'
 import { OneDriveProvider } from './providers/oneDriveProvider'
 import type { StorageProvider } from './providers/storageProvider'
@@ -42,6 +45,7 @@ export interface StorageConfigInput {
     keepLast?: number
   }
   s3Compatible?: S3CompatibleProviderConfig
+  supabase?: SupabaseStorageProviderConfig
 }
 
 export class VaultRepository {
@@ -67,6 +71,7 @@ export class VaultRepository {
     local: { vaultFolder: string; backupsEnabled: boolean; keepLast: number }
     googleDrive: { connected: boolean; email?: string }
     s3Compatible: { configured: boolean }
+    supabase: { configured: boolean }
   } {
     const payload = this.vaultPayload
     const localConfig = payload?.providerConfigs.local
@@ -84,6 +89,9 @@ export class VaultRepository {
       },
       s3Compatible: {
         configured: !!payload?.providerConfigs.s3Compatible
+      },
+      supabase: {
+        configured: !!payload?.providerConfigs.supabase
       }
     }
   }
@@ -255,6 +263,35 @@ export class VaultRepository {
     return provider.testConnection()
   }
 
+  async testSupabaseConnection(config: SupabaseStorageProviderConfig): Promise<{ ok: boolean; error?: string }> {
+    const provider = new SupabaseStorageProvider(config)
+    return provider.testConnection()
+  }
+
+  async uploadSupabaseSnapshot(config: SupabaseStorageProviderConfig, data: Buffer, retainCount: number): Promise<{ versionId: string }> {
+    const provider = new SupabaseStorageProvider(config)
+    return provider.upload(data, {
+      baseName: 'passgen-vault',
+      contentType: 'application/octet-stream',
+      retainCount
+    })
+  }
+
+  async downloadSupabaseSnapshot(config: SupabaseStorageProviderConfig, versionId?: string): Promise<Buffer> {
+    const provider = new SupabaseStorageProvider(config)
+    return provider.download(versionId ? { versionId } : undefined)
+  }
+
+  async listSupabaseVersions(config: SupabaseStorageProviderConfig): Promise<ProviderVersion[]> {
+    const provider = new SupabaseStorageProvider(config)
+    return provider.listVersions()
+  }
+
+  async restoreSupabaseVersion(config: SupabaseStorageProviderConfig, versionId: string): Promise<Buffer> {
+    const provider = new SupabaseStorageProvider(config)
+    return provider.restoreVersion(versionId)
+  }
+
   async getSignedS3Request(config: S3CompatibleProviderConfig, key: string): Promise<Record<string, string>> {
     const provider = new S3CompatibleProvider(config)
     const signed = await provider.createSignedRequest(key)
@@ -349,6 +386,11 @@ export class VaultRepository {
         if (!config) return null
         return new S3CompatibleProvider(config)
       }
+      case 'supabase': {
+        const config = this.vaultPayload?.providerConfigs.supabase
+        if (!config) return null
+        return new SupabaseStorageProvider(config)
+      }
       case 'dropbox':
         return new DropboxProvider()
       case 'onedrive':
@@ -397,6 +439,10 @@ export class VaultRepository {
 
     if (config.s3Compatible) {
       providerConfigs.s3Compatible = config.s3Compatible
+    }
+
+    if (config.supabase) {
+      providerConfigs.supabase = config.supabase
     }
   }
 

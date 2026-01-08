@@ -341,6 +341,42 @@
   font-size: 0.85rem;
 }
 
+.auth-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-toggle-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px dashed #d6d9e5;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.78rem;
+  color: #374151;
+}
+
+.auth-toggle-option input {
+  margin: 0;
+}
+
+.auth-toggle-option.disabled {
+  opacity: 0.6;
+}
+
+.toggle-pill {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 .inline-row {
   display: flex;
   gap: 8px;

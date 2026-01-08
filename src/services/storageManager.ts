@@ -6,6 +6,7 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
   local: 'Local Storage',
   'google-drive': 'Google Drive',
   's3-compatible': 'S3-Compatible Storage',
+  supabase: 'Supabase Storage',
   dropbox: 'Dropbox (Coming soon)',
   onedrive: 'OneDrive (Coming soon)'
 }

@@ -1,4 +1,4 @@
-export type ProviderId = 'local' | 'google-drive' | 's3-compatible' | 'dropbox' | 'onedrive'
+export type ProviderId = 'local' | 'google-drive' | 's3-compatible' | 'supabase' | 'dropbox' | 'onedrive'
 
 export interface LocalStorageConfig {
   vaultFolder?: string
@@ -15,8 +15,17 @@ export interface S3CompatibleConfig {
   pathPrefix?: string
 }
 
+export interface SupabaseStorageConfig {
+  projectUrl: string
+  anonKey: string
+  bucket: string
+  pathPrefix?: string
+  authMode?: 'anon' | 'oauth'
+}
+
 export interface StorageConfig {
   provider: ProviderId
   local?: LocalStorageConfig
   s3Compatible?: S3CompatibleConfig
+  supabase?: SupabaseStorageConfig
 }

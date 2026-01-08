@@ -2,6 +2,9 @@
   "name": "passgen",
   "version": "1.0.7",
   "description": "A secure password generator desktop application",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",

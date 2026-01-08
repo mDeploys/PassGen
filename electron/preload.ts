@@ -1,9 +1,6 @@
 import { contextBridge, ipcRenderer, clipboard } from 'electron'
 
 contextBridge.exposeInMainWorld('electron', {
-  payment: {
-    requestActivation: (payload: { email: string; requestId: string; paymentMethod?: 'paypal' | 'crypto' }) => ipcRenderer.invoke('payment:requestActivation', payload)
-  },
   clipboard: {
     writeText: async (text: string) => {
       try {
@@ -62,6 +59,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   storageSelectVaultFolder: () => ipcRenderer.invoke('storage:selectVaultFolder'),
   storageTestS3: (config: any) => ipcRenderer.invoke('storage:testS3', config),
   storageS3SignedRequest: (config: any, key: string) => ipcRenderer.invoke('storage:s3SignedRequest', config, key),
+  storageSupabaseTest: (config: any) => ipcRenderer.invoke('storage:supabaseTest', config),
+  storageSupabaseUpload: (config: any, data: string, retainCount?: number) => ipcRenderer.invoke('storage:supabaseUpload', config, data, retainCount),
+  storageSupabaseDownload: (config: any, versionId?: string) => ipcRenderer.invoke('storage:supabaseDownload', config, versionId),
+  storageSupabaseListVersions: (config: any) => ipcRenderer.invoke('storage:supabaseListVersions', config),
+  storageSupabaseRestoreVersion: (config: any, versionId: string) => ipcRenderer.invoke('storage:supabaseRestoreVersion', config, versionId),
   oauthGoogleDrive: () => ipcRenderer.invoke('oauth:google'),
   storageGoogleDriveConnect: () => ipcRenderer.invoke('storage:googleDriveConnect'),
   storageGoogleDriveDisconnect: () => ipcRenderer.invoke('storage:googleDriveDisconnect'),
@@ -71,6 +73,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   authLogout: () => ipcRenderer.invoke('auth:logout'),
   licenseGetMe: () => ipcRenderer.invoke('license:getMe'),
   licenseRedeem: (payload: { licenseKey: string; deviceId?: string }) => ipcRenderer.invoke('license:redeem', payload),
+  openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+  settingsGet: () => ipcRenderer.invoke('settings:get'),
+  settingsSet: (payload: { minimizeToTray?: boolean }) => ipcRenderer.invoke('settings:set', payload),
+  devSecretGenerate: () => ipcRenderer.invoke('dev-secret:generate'),
+  devSecretSelectProject: () => ipcRenderer.invoke('dev-secret:selectProject'),
+  devSecretInjectEnv: (payload: { folder: string; key: string; value: string }) => ipcRenderer.invoke('dev-secret:injectEnv', payload),
   onAuthUpdated: (handler: (session: any) => void) => {
     const listener = (_event: any, session: any) => handler(session)
     ipcRenderer.on('auth:updated', listener)
@@ -81,9 +89,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 declare global {
   interface Window {
     electron: {
-      payment: {
-        requestActivation: (payload: { email: string; requestId: string; paymentMethod?: 'paypal' | 'crypto' }) => Promise<{ success: boolean; error?: string }>
-      }
       clipboard: {
         writeText: (text: string) => Promise<boolean>
         readText: () => Promise<string>
@@ -111,6 +116,11 @@ declare global {
       storageSelectVaultFolder: () => Promise<{ success: boolean; folder?: string }>
       storageTestS3: (config: any) => Promise<{ ok: boolean; error?: string }>
       storageS3SignedRequest: (config: any, key: string) => Promise<Record<string, string>>
+      storageSupabaseTest: (config: any) => Promise<{ ok: boolean; error?: string }>
+      storageSupabaseUpload: (config: any, data: string, retainCount?: number) => Promise<{ versionId: string }>
+      storageSupabaseDownload: (config: any, versionId?: string) => Promise<string>
+      storageSupabaseListVersions: (config: any) => Promise<any[]>
+      storageSupabaseRestoreVersion: (config: any, versionId: string) => Promise<string>
       oauthGoogleDrive: () => Promise<{ email: string; provider: 'google-drive'; token: any }>
       storageGoogleDriveConnect: () => Promise<{ email: string; provider: 'google-drive'; token: any }>
       storageGoogleDriveDisconnect: () => Promise<void>
@@ -120,6 +130,12 @@ declare global {
       authLogout: () => Promise<{ ok: boolean }>
       licenseGetMe: () => Promise<{ email: string; plan: string; isPremium: boolean }>
       licenseRedeem: (payload: { licenseKey: string; deviceId?: string }) => Promise<{ isPremium: boolean; plan: string; expiresAt?: string | null }>
+      openExternal: (url: string) => Promise<{ ok: boolean }>
+      settingsGet: () => Promise<{ minimizeToTray: boolean }>
+      settingsSet: (payload: { minimizeToTray?: boolean }) => Promise<{ minimizeToTray: boolean }>
+      devSecretGenerate: () => Promise<{ base64Url: string; hex: string }>
+      devSecretSelectProject: () => Promise<{ success: boolean; folder?: string; hasEnv?: boolean; envPath?: string }>
+      devSecretInjectEnv: (payload: { folder: string; key: string; value: string }) => Promise<{ success: boolean; envPath?: string; updated?: boolean; created?: boolean }>
       passkeyStoreKey: (installId: string) => Promise<{ ok: boolean }>
       passkeyClearKey: (installId: string) => Promise<{ ok: boolean }>
       onAuthUpdated: (handler: (session: any) => void) => () => void

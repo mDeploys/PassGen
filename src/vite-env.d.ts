@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+declare module '*?raw' {
+	const content: string
+	export default content
+}
+
 interface ClipboardAPI {
 	writeText: (text: string) => void
 }

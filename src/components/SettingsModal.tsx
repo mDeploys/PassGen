@@ -3,12 +3,9 @@ import './UpgradeModal.css'
 import './SettingsModal.css'
 import { useI18n } from '../services/i18n'
 import { ConfigStore } from '../services/configStore'
+import googleIconSvg from '../assets/google-g.svg?raw'
 
-const googleIconUrl = new URL('../assets/google-g.svg', import.meta.url).href
-const googleIconFallback =
-  typeof window !== 'undefined'
-    ? new URL('./google-g.svg', window.location.href).href
-    : googleIconUrl
+const googleIconUrl = `data:image/svg+xml;utf8,${encodeURIComponent(googleIconSvg)}`
 
 interface SettingsModalProps {
   open: boolean
@@ -165,11 +162,6 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                   <img
                     src={googleIconUrl}
                     alt="Google"
-                    onError={(event) => {
-                      if (event.currentTarget.src !== googleIconFallback) {
-                        event.currentTarget.src = googleIconFallback
-                      }
-                    }}
                   />
                   {t('Continue with Google')}
                 </button>

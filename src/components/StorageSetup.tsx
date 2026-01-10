@@ -4,12 +4,13 @@ import { applyRemoteLicense, type PremiumTier } from '../services/license'
 import { ConfigStore } from '../services/configStore'
 import './StorageSetup.css'
 import { useI18n } from '../services/i18n'
+import googleIconSvg from '../assets/google-g.svg?raw'
+import supabaseIconSvg from '../assets/supabase.svg?raw'
+import oneDriveIconSvg from '../assets/onedrive.svg?raw'
 
-const googleIconUrl = new URL('../assets/google-g.svg', import.meta.url).href
-const googleIconFallback =
-  typeof window !== 'undefined'
-    ? new URL('./google-g.svg', window.location.href).href
-    : googleIconUrl
+const googleIconUrl = `data:image/svg+xml;utf8,${encodeURIComponent(googleIconSvg)}`
+const supabaseIconUrl = `data:image/svg+xml;utf8,${encodeURIComponent(supabaseIconSvg)}`
+const oneDriveIconUrl = `data:image/svg+xml;utf8,${encodeURIComponent(oneDriveIconSvg)}`
 
 interface StorageSetupProps {
   open: boolean
@@ -525,11 +526,6 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                           <img
                             src={googleIconUrl}
                             alt="Google"
-                            onError={(event) => {
-                              if (event.currentTarget.src !== googleIconFallback) {
-                                event.currentTarget.src = googleIconFallback
-                              }
-                            }}
                           />
                           {authBusy ? t('Connecting...') : t('Continue with Google')}
                         </button>
@@ -550,7 +546,14 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                     <div className="premium-title">{t('Become Premium')}</div>
                     <div className="premium-sub">{t('Request activation after payment to unlock Premium.')}</div>
                     <div className="premium-action-row">
-                      <button type="button" className="secondary-btn" onClick={() => window.dispatchEvent(new Event('open-upgrade'))}>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => {
+                          onClose()
+                          window.dispatchEvent(new Event('open-upgrade'))
+                        }}
+                      >
                         {t('Request Activation')}
                       </button>
                     </div>
@@ -633,7 +636,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                   onChange={() => handleProviderSelect('supabase')}
                   disabled={!allowSupabase}
                 />
-                <img src="./supabase.svg" alt="Supabase" className="provider-icon" />
+                <img src={supabaseIconUrl} alt="Supabase" className="provider-icon" />
                 <div className="provider-info">
                   <div className="provider-title">
                     <strong>{t('Supabase Storage')}</strong>
@@ -657,7 +660,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
 
               <label className="provider-option disabled">
                 <input type="radio" name="provider" value="onedrive" disabled />
-                <span className="provider-icon">☁️</span>
+                <img src={oneDriveIconUrl} alt="OneDrive" className="provider-icon" />
                 <div className="provider-info">
                   <div className="provider-title">
                     <strong>{t('OneDrive')}</strong>

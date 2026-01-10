@@ -57,6 +57,7 @@ let appServerReady = false;
 let tray: Tray | null = null;
 let isQuitting = false;
 let aboutWindow: BrowserWindow | null = null;
+let updateWindow: BrowserWindow | null = null;
 
 type AppSettings = {
   minimizeToTray: boolean
@@ -182,13 +183,7 @@ function getAboutInfo() {
 
 function buildAboutHtml() {
   const info = getAboutInfo()
-  const aboutIconCandidates = [
-    path.join(process.cwd(), 'public', 'icon.png'),
-    path.join(process.cwd(), 'dist', 'icon.png'),
-    resolveIconPath()
-  ].filter(Boolean) as string[]
-  const iconPath = aboutIconCandidates.find((candidate) => candidate && fs.existsSync(candidate)) || ''
-  const iconUrl = iconPath ? `file://${iconPath.replace(/\\/g, '/')}` : ''
+  const iconUrl = getInlineAppIconUrl()
   const rows = [
     ['PassGen Version', info.appVersion],
     ['Commit', info.commit],
@@ -362,6 +357,144 @@ function buildAboutHtml() {
     </script>
   </body>
 </html>`
+}
+
+function buildUpdateHtml(tag: string, url: string) {
+  const iconUrl = getInlineAppIconUrl()
+  const safeUrl = url || ''
+  const safeTag = tag || ''
+  const downloadDisabled = !safeUrl
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Update Available</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "Inter", sans-serif;
+        background: #f5f3ff;
+        color: #1f2937;
+      }
+      .frame {
+        margin: 16px;
+        border-radius: 16px;
+        padding: 16px 18px 14px;
+        border: 1px solid rgba(196, 181, 253, 0.9);
+        box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.18), 0 16px 32px rgba(76, 29, 149, 0.18);
+        background: linear-gradient(160deg, #ffffff, #ede9fe);
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(139, 92, 246, 0.12);
+        border: 2px solid rgba(139, 92, 246, 0.5);
+        color: #6d28d9;
+        font-weight: 700;
+        font-size: 18px;
+        overflow: hidden;
+      }
+      .icon img {
+        width: 20px;
+        height: 20px;
+        object-fit: contain;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0;
+        font-weight: 700;
+        color: #312e81;
+      }
+      .subtitle {
+        margin: 6px 0 14px;
+        color: #4c1d95;
+        font-size: 13px;
+      }
+      .actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      button {
+        padding: 8px 14px;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        font-weight: 700;
+        background: linear-gradient(130deg, #6d28d9, #8b5cf6);
+        color: #ffffff;
+        box-shadow: 0 10px 22px rgba(109, 40, 217, 0.25);
+      }
+      button.secondary {
+        background: #f5f3ff;
+        border: 1px solid rgba(139, 92, 246, 0.4);
+        color: #5b21b6;
+        box-shadow: none;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="header">
+        <div class="icon">${iconUrl ? `<img src="${iconUrl}" alt="PassGen" />` : '!'}</div>
+        <h1>Update Available</h1>
+      </div>
+      <div class="subtitle">A new version ${safeTag || 'is available'}.</div>
+      <div class="subtitle">Click Download to open the releases page.</div>
+      <div class="actions">
+        <button id="downloadBtn" ${downloadDisabled ? 'disabled' : ''}>Download</button>
+        <button class="secondary" id="laterBtn">Later</button>
+      </div>
+    </div>
+    <script>
+      const url = ${JSON.stringify(safeUrl)};
+      const downloadBtn = document.getElementById('downloadBtn');
+      const laterBtn = document.getElementById('laterBtn');
+      if (downloadBtn) {
+        downloadBtn.addEventListener('click', () => {
+          if (url) window.open(url, '_blank');
+          window.close();
+        });
+      }
+      if (laterBtn) {
+        laterBtn.addEventListener('click', () => window.close());
+      }
+    </script>
+  </body>
+</html>`
+}
+
+function getInlineAppIconUrl(): string {
+  const iconCandidates = [
+    path.join(process.cwd(), 'public', 'icon.png'),
+    path.join(process.cwd(), 'dist', 'icon.png'),
+    resolveIconPath()
+  ].filter(Boolean) as string[]
+  const iconPath = iconCandidates.find((candidate) => candidate && fs.existsSync(candidate)) || ''
+  if (!iconPath) return ''
+  try {
+    const iconData = fs.readFileSync(iconPath)
+    return `data:image/png;base64,${iconData.toString('base64')}`
+  } catch {
+    return ''
+  }
 }
 
 function getMinimizeToTraySetting(): boolean {
@@ -933,23 +1066,50 @@ async function checkForUpdates(silent = false) {
     )()`
     const { tag, url } = await (mainWindow?.webContents.executeJavaScript(js).catch(()=>({tag:'',url:''})) || Promise.resolve({tag:'',url:''}))
     if (tag && isNewer(tag, current)) {
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Update Available',
-        message: `A new version ${tag} is available`,
-        detail: 'Click Download to open the releases page.',
-        buttons: ['Download', 'Later'],
-        defaultId: 0,
-        cancelId: 1
-      }).then(({ response }) => {
-        if (response === 0 && url) shell.openExternal(url)
-      })
+      showUpdateDialog(tag, url)
     } else if (!silent) {
       dialog.showMessageBox({ type: 'info', title: 'PassGen', message: 'You have the latest version.' })
     }
   } catch (e) {
     if (!silent) dialog.showMessageBox({ type: 'warning', title: 'Update Check Failed', message: String((e as Error).message||e) })
   }
+}
+
+function showUpdateDialog(tag: string, url: string) {
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    updateWindow.focus()
+    return
+  }
+  updateWindow = new BrowserWindow({
+    width: 420,
+    height: 240,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    parent: mainWindow || undefined,
+    modal: true,
+    title: 'Update Available',
+    icon: resolveIconPath(),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: true
+    }
+  })
+  updateWindow.once('ready-to-show', () => updateWindow?.show())
+  updateWindow.on('closed', () => {
+    updateWindow = null
+  })
+  updateWindow.webContents.setWindowOpenHandler(({ url: openUrl }) => {
+    shell.openExternal(openUrl)
+    return { action: 'deny' }
+  })
+  updateWindow.webContents.on('will-navigate', (event, navUrl) => {
+    event.preventDefault()
+    shell.openExternal(navUrl)
+  })
+  const html = buildUpdateHtml(tag, url)
+  updateWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
 }
 
 function createWindow() {

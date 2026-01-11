@@ -26,13 +26,11 @@ A secure and user-friendly desktop application for generating strong passwords a
 - 📝 Store additional info: username, URL, notes
 - 🔐 Master password protection
 
-### Free vs Premium
+### Plans
 - **Free**: Store up to 4 passwords locally
-- **Premium** ($3.99/month):
-  - Unlimited password storage
-  - Cloud sync (Google Drive, AWS S3, DigitalOcean Spaces)
-  - Automatic backups
-  - Priority support
+- **Pro**: Unlimited local storage + Developer tools
+- **Cloud**: Google Drive sync + encrypted cloud restore
+- **Power (BYOS)**: S3-compatible + Supabase storage
 
 <img width="815" height="664" alt="image" src="https://github.com/user-attachments/assets/dbb20dd9-5371-4c81-b0e4-02a62200b47f" />
 <img width="885" height="721" alt="Screenshot 2026-01-10 103201" src="https://github.com/user-attachments/assets/cefea863-35c0-449b-bb90-f886b339b4a1" />
@@ -219,10 +217,10 @@ The built application will be available in the `release` folder.
 6. Click copy buttons to copy username or password
 
 ### Upgrading to Premium
-1. Click "Upgrade to Premium" in the vault
-2. Complete PayPal payment ($3.99/month)
-3. Request activation code via email
-4. Enter activation code to unlock premium features
+1. Click "Upgrade" or "Premium Access" in the app
+2. Copy your Install ID and open the payment page
+3. After payment, you receive a license key by email
+4. Enter the license key to unlock premium features
 <img width="877" height="663" alt="image" src="https://github.com/user-attachments/assets/a1483bd4-50ff-48dd-992b-8be894878a64" />
 <img width="759" height="531" alt="image" src="https://github.com/user-attachments/assets/13d12a58-a763-4918-b6d5-fba9552e0036" />
 <img width="562" height="498" alt="image" src="https://github.com/user-attachments/assets/50e8092f-b006-4918-80f4-c1582666d8de" />

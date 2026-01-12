@@ -15,7 +15,7 @@
     "electron:build": "node scripts/write-build-info.js && tsc && vite build && node scripts/sync-icons.js && electron-builder",
 
     "prebuild:msix": "node scripts/write-build-info.js && tsc && vite build && node scripts/sync-icons.js && node scripts/prepare-store-icons.js",
-    "build:msix": "cross-env STORE_BUILD=1 electron-builder --win msix",
+    "build:msix": "cross-env STORE_BUILD=1 electron-builder --win appx",
 
     "test:vault": "tsc && electron . --vault-self-test",
     "test:oauth": "tsc && electron . --oauth-ipc-test",
@@ -85,12 +85,13 @@
       "publisherName": "CN=92CE8CEC-534B-45DF-B9FE-D346FD430CC0",
       "target": [
         { "target": "nsis", "arch": ["x64"] },
-        { "target": "msix", "arch": ["x64"] }
+        { "target": "appx", "arch": ["x64"] }
       ]
     },
-    "msix": {
+    "appx": {
       "identityName": "JalalNasser.PassGenSecretsVault",
       "displayName": "PassGen Secrets Vault",
+      "publisher": "CN=92CE8CEC-534B-45DF-B9FE-D346FD430CC0",
       "publisherDisplayName": "Jalal Nasser",
       "backgroundColor": "#0B0A14"
     },

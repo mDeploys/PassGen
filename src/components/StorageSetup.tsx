@@ -554,7 +554,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                           window.dispatchEvent(new Event('open-upgrade'))
                         }}
                       >
-                        {t('Request Activation')}
+                        {t('Become Premium')}
                       </button>
                     </div>
                   </div>

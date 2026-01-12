@@ -1,7 +1,7 @@
 {
   "name": "passgen",
   "version": "1.0.7",
-  "description": "A secure password generator desktop application",
+  "description": "A Vault secure password generator desktop application",
   "engines": {
     "node": ">=20.0.0"
   },
@@ -10,8 +10,13 @@
     "dev": "vite",
     "build": "node scripts/write-build-info.js && tsc && vite build && node scripts/sync-icons.js && electron-builder",
     "preview": "vite preview",
+
     "electron:dev": "tsc && concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "node scripts/write-build-info.js && tsc && vite build && node scripts/sync-icons.js && electron-builder",
+
+    "prebuild:msix": "node scripts/write-build-info.js && tsc && vite build && node scripts/sync-icons.js && node scripts/prepare-store-icons.js",
+    "build:msix": "cross-env STORE_BUILD=1 electron-builder --win msix",
+
     "test:vault": "tsc && electron . --vault-self-test",
     "test:oauth": "tsc && electron . --oauth-ipc-test",
     "test:auth": "tsc && electron . --auth-test",
@@ -21,12 +26,7 @@
     "dashboard": "node dashboard-server.js",
     "discord-bot": "node discord-bot.js"
   },
-  "keywords": [
-    "password",
-    "generator",
-    "electron",
-    "desktop"
-  ],
+  "keywords": ["password", "generator", "electron", "desktop"],
   "author": "",
   "license": "MIT",
   "devDependencies": {
@@ -36,12 +36,15 @@
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1",
     "typescript": "^5.3.3",
     "vite": "^5.0.8",
     "vite-plugin-electron": "^0.28.0",
     "vite-plugin-electron-renderer": "^0.14.5",
+    "png-to-ico": "^2.1.0",
+    "sharp": "^0.33.2",
     "wait-on": "^7.2.0"
   },
   "dependencies": {
@@ -68,56 +71,46 @@
   },
   "build": {
     "appId": "com.passgen.app",
-    "productName": "PassGen",
+    "productName": "PassGen Secrets Vault",
     "directories": {
       "output": "release"
     },
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*"
-    ],
+    "files": ["dist/**/*", "dist-electron/**/*"],
     "extraResources": [
-      {
-        "from": "resources/.env",
-        "to": ".env"
-      },
-      {
-        "from": "resources/build-info.json",
-        "to": "build-info.json"
-      }
+      { "from": "resources/.env", "to": ".env" },
+      { "from": "resources/build-info.json", "to": "build-info.json" }
     ],
     "win": {
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
+      "publisherName": "CN=92CE8CEC-534B-45DF-B9FE-D346FD430CC0",
       "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "msix", "arch": ["x64"] }
       ]
+    },
+    "msix": {
+      "identityName": "JalalNasser.PassGenSecretsVault",
+      "displayName": "PassGen Secrets Vault",
+      "publisherDisplayName": "Jalal Nasser",
+      "backgroundColor": "#0B0A14"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
-      "shortcutName": "PassGen",
+      "shortcutName": "PassGen Secrets Vault",
       "deleteAppDataOnUninstall": false,
       "perMachine": false,
       "license": "LICENSE.txt"
     },
     "mac": {
       "icon": "public/icon.png",
-      "target": [
-        "dmg"
-      ]
+      "target": ["dmg"]
     },
     "linux": {
       "icon": "public/icon.png",
-      "target": [
-        "AppImage"
-      ]
+      "target": ["AppImage"]
     }
   }
 }

@@ -58,6 +58,7 @@ let tray: Tray | null = null;
 let isQuitting = false;
 let aboutWindow: BrowserWindow | null = null;
 let updateWindow: BrowserWindow | null = null;
+const isStoreBuild = process.env.STORE_BUILD === '1' || process.windowsStore === true;
 
 type AppSettings = {
   minimizeToTray: boolean
@@ -320,6 +321,7 @@ function buildAboutHtml() {
           <button class="secondary" data-href="${HELP_WEBSITE_URL}">Website</button>
           <button class="secondary" data-href="${HELP_RELEASES_URL}">GitHub</button>
           <button class="secondary" data-href="${HELP_ISSUES_URL}">Support</button>
+          <button class="secondary" data-href="${HELP_PRIVACY_URL}">Privacy Policy</button>
         </div>
         <div class="link-row">
           <button class="secondary" id="copyBtn">Copy</button>
@@ -635,10 +637,11 @@ function resolveIconPath() {
 }
 
 const HELP_DOCS_URL = 'https://github.com/mDeploys/PassGen'
-const HELP_ISSUES_URL = 'https://github.com/mDeploys/PassGen/issues'
+const HELP_ISSUES_URL = 'https://passgen.mdeploy.dev/support'
 const HELP_RELEASES_URL = 'https://github.com/mDeploys/PassGen/releases'
 const HELP_WEBSITE_URL = 'https://mdeploy.dev'
 const HELP_TERMS_URL = 'https://github.com/mDeploys/PassGen/blob/main/LICENSE.txt'
+const HELP_PRIVACY_URL = 'https://passgen.mdeploy.dev/privacy'
 const KEYBOARD_SHORTCUTS_DETAIL =
   'Ctrl+C - Copy password\nCtrl+L - Lock vault\nCtrl+N - New password entry\nCtrl+F - Search vault\nCtrl+Q - Quit application\nF5 - Refresh\nF11 - Toggle fullscreen'
 
@@ -925,14 +928,16 @@ function setApplicationMenu() {
               click: showKeyboardShortcuts
             },
             { type: 'separator' },
-            {
-              label: 'Check for Updates',
-              click: () => { checkForUpdates(false) }
-            },
-            {
-              label: 'GitHub Releases',
-              click: openReleases
-            },
+            ...(!isStoreBuild ? [
+              {
+                label: 'Check for Updates',
+                click: () => { checkForUpdates(false) }
+              },
+              {
+                label: 'GitHub Releases',
+                click: openReleases
+              }
+            ] : []),
             {
               label: 'About PassGen',
               click: showAboutDialog
@@ -1012,14 +1017,16 @@ function buildDefaultMenu() {
           click: showKeyboardShortcuts
         },
         { type: 'separator' },
-        {
-          label: 'Check for Updates',
-          click: () => { checkForUpdates(false) }
-        },
-        {
-          label: 'GitHub Releases',
-          click: openReleases
-        },
+        ...(!isStoreBuild ? [
+          {
+            label: 'Check for Updates',
+            click: () => { checkForUpdates(false) }
+          },
+          {
+            label: 'GitHub Releases',
+            click: openReleases
+          }
+        ] : []),
         {
           label: 'About PassGen',
           click: showAboutDialog
@@ -1054,6 +1061,9 @@ function isNewer(latest: string, current: string): boolean {
 }
 
 async function checkForUpdates(silent = false) {
+  if (isStoreBuild) {
+    return
+  }
   try {
     const current = app.getVersion().replace(/^v/, '')
     const js = `(
@@ -1076,6 +1086,9 @@ async function checkForUpdates(silent = false) {
 }
 
 function showUpdateDialog(tag: string, url: string) {
+  if (isStoreBuild) {
+    return
+  }
   if (updateWindow && !updateWindow.isDestroyed()) {
     updateWindow.focus()
     return
@@ -1417,9 +1430,11 @@ if (!gotTheLock) {
     }
     createWindow()
     setApplicationMenu()
-    // Initial update check and periodic checks every 6 hours
-    setTimeout(() => checkForUpdates(true), 5000)
-    setInterval(() => checkForUpdates(true), 6 * 60 * 60 * 1000)
+    if (!isStoreBuild) {
+      // Initial update check and periodic checks every 6 hours
+      setTimeout(() => checkForUpdates(true), 5000)
+      setInterval(() => checkForUpdates(true), 6 * 60 * 60 * 1000)
+    }
     startBridgeServer()
 
     const initialProtocolUrl = findProtocolUrl(process.argv || [])

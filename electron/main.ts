@@ -637,7 +637,7 @@ function resolveIconPath() {
 }
 
 const HELP_DOCS_URL = 'https://github.com/mDeploys/PassGen'
-const HELP_ISSUES_URL = 'https://passgen.mdeploy.dev/support'
+const HELP_ISSUES_URL = 'https://github.com/mDeploys/PassGen/issues'
 const HELP_RELEASES_URL = 'https://github.com/mDeploys/PassGen/releases'
 const HELP_WEBSITE_URL = 'https://mdeploy.dev'
 const HELP_TERMS_URL = 'https://github.com/mDeploys/PassGen/blob/main/LICENSE.txt'

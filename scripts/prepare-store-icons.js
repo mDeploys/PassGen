@@ -23,6 +23,10 @@ async function ensureStoreIcons() {
   if (!fs.existsSync(buildDir)) {
     fs.mkdirSync(buildDir, { recursive: true })
   }
+  const appxDir = path.join(buildDir, 'appx')
+  if (!fs.existsSync(appxDir)) {
+    fs.mkdirSync(appxDir, { recursive: true })
+  }
 
   const sizes = [256, 512]
   const buffers = []
@@ -45,6 +49,27 @@ async function ensureStoreIcons() {
   const icoBuffer = await pngToIco(buffers)
   fs.writeFileSync(icoPath, icoBuffer)
   console.log(`Generated: ${icoPath}`)
+
+  const appxAssets = [
+    { name: 'Square44x44Logo.png', width: 44, height: 44 },
+    { name: 'Square150x150Logo.png', width: 150, height: 150 },
+    { name: 'Wide310x150Logo.png', width: 310, height: 150 },
+    { name: 'Square310x310Logo.png', width: 310, height: 310 },
+    { name: 'StoreLogo.png', width: 50, height: 50 }
+  ]
+
+  for (const asset of appxAssets) {
+    const targetPath = path.join(appxDir, asset.name)
+    const buffer = await sharp(srcIcon)
+      .resize(asset.width, asset.height, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
+      })
+      .png()
+      .toBuffer()
+    fs.writeFileSync(targetPath, buffer)
+    console.log(`Generated: ${targetPath}`)
+  }
 }
 
 ensureStoreIcons().catch((error) => {

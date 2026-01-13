@@ -72,6 +72,7 @@
   "build": {
     "appId": "com.passgen.app",
     "productName": "PassGen Secrets Vault",
+    "appxManifestCreated": "scripts/appx-manifest.js",
     "directories": {
       "output": "release"
     },

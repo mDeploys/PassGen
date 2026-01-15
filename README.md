@@ -43,9 +43,11 @@ A secure and user-friendly desktop application for generating strong passwords a
 
 ## Download
 
-Get the latest Windows installer from the public downloads repo:
+Get PassGen Secrets Vault from the Microsoft Store:
 
-https://github.com/mDeploys/PassGen/releases
+<a href="https://apps.microsoft.com/store/detail/9n5c328ctl7d">
+  <img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200">
+</a>
 
 ## User Guide
 

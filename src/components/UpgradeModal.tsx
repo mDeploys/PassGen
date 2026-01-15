@@ -10,7 +10,7 @@ interface UpgradeModalProps {
   onClose: () => void
 }
 
-const PAYMENT_PAGE_BASE_URL = 'https://github.mdeploy.dev/apps-gallery/passgen'
+const PAYMENT_PAGE_BASE_URL = 'https://git.mdeploy.dev/passgen'
 
 export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
   const store = new ConfigStore()

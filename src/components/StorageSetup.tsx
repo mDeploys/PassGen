@@ -32,6 +32,10 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
   const [googleEmail, setGoogleEmail] = useState('')
   const [googleBusy, setGoogleBusy] = useState(false)
   const [googleError, setGoogleError] = useState<string | null>(null)
+  const [oneDriveConnected, setOneDriveConnected] = useState(false)
+  const [oneDriveEmail, setOneDriveEmail] = useState('')
+  const [oneDriveBusy, setOneDriveBusy] = useState(false)
+  const [oneDriveError, setOneDriveError] = useState<string | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const [licenseError, setLicenseError] = useState<string | null>(null)
@@ -56,6 +60,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
   const [s3Testing, setS3Testing] = useState(false)
   const [s3TestResult, setS3TestResult] = useState<string | null>(null)
   const allowGoogle = planTier === 'cloud' || planTier === 'byos'
+  const allowOneDrive = planTier === 'cloud' || planTier === 'byos'
   const allowS3 = planTier === 'byos'
   const [supabaseConfig, setSupabaseConfig] = useState(() => {
     const store = new ConfigStore()
@@ -89,6 +94,10 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
         if (status?.googleDrive) {
           setGoogleConnected(!!status.googleDrive.connected)
           setGoogleEmail(status.googleDrive.email || '')
+        }
+        if (status?.oneDrive) {
+          setOneDriveConnected(!!status.oneDrive.connected)
+          setOneDriveEmail(status.oneDrive.email || '')
         }
       } catch (error) {
         console.warn('Failed to load provider status', error)
@@ -177,6 +186,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
   useEffect(() => {
     if (!open) return
     setGoogleError(null)
+    setOneDriveError(null)
     setAuthError(null)
     setLicenseError(null)
     setS3TestResult(null)
@@ -195,6 +205,14 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
     }
   }
 
+  const formatOneDriveError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    if (/onedrive oauth credentials are not configured/i.test(message)) {
+      return t('OneDrive requires your own Azure App registration (Client ID).')
+    }
+    return t('Connection failed: {{message}}', { message })
+  }
+
   const syncPremiumFromMe = (me: any) => {
     applyRemoteLicense(me)
   }
@@ -207,8 +225,12 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
   }
 
   const handleProviderSelect = (next: ProviderId) => {
-    if (next === 'dropbox' || next === 'onedrive') return
+    if (next === 'dropbox') return
     if (next === 'google-drive' && !allowGoogle) {
+      window.dispatchEvent(new Event('open-upgrade'))
+      return
+    }
+    if (next === 'onedrive' && !allowOneDrive) {
       window.dispatchEvent(new Event('open-upgrade'))
       return
     }
@@ -228,6 +250,10 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
       window.dispatchEvent(new Event('open-upgrade'))
       return
     }
+    if (provider === 'onedrive' && !allowOneDrive) {
+      window.dispatchEvent(new Event('open-upgrade'))
+      return
+    }
     if (provider === 's3-compatible' && !allowS3) {
       window.dispatchEvent(new Event('open-upgrade'))
       return
@@ -236,7 +262,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
       window.dispatchEvent(new Event('open-upgrade'))
       return
     }
-    if (provider === 'dropbox' || provider === 'onedrive') {
+    if (provider === 'dropbox') {
       return
     }
     setStep('config')
@@ -324,6 +350,79 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
       setGoogleError(message)
     } finally {
       setGoogleBusy(false)
+    }
+  }
+
+  const handleOneDriveConnect = async () => {
+    const api = (window as any).electronAPI
+    const connect = api?.storageOneDriveConnect
+    if (!connect) {
+      setOneDriveError(t('Vault backend is not available'))
+      return
+    }
+    if (!api?.licenseGetMe) {
+      setLicenseError(t('Vault backend is not available'))
+      return
+    }
+    try {
+      const me = await api.licenseGetMe()
+      setAppAccount((prev: any) => ({ ...(prev || {}), ...me }))
+      setLicenseStatus(me)
+      syncPremiumFromMe(me)
+      const nextTier = normalizePlan(me?.plan, me?.isPremium)
+      setPlanTier(nextTier)
+      setLicenseError(null)
+      if (!me?.email) {
+        setOneDriveError(t('App account required to continue.'))
+        return
+      }
+      const canUseOneDrive = nextTier === 'cloud' || nextTier === 'byos'
+      if (!canUseOneDrive) {
+        setOneDriveError(t('Upgrade to Cloud or BYOS to enable OneDrive.'))
+        window.dispatchEvent(new Event('open-upgrade'))
+        return
+      }
+    } catch (error) {
+      const { message, isAuthError } = formatLicenseError(error)
+      setLicenseError(message)
+      setLicenseStatus(null)
+      setPlanTier('free')
+      if (isAuthError) {
+        setAppAccount(null)
+      }
+      return
+    }
+
+    try {
+      setOneDriveBusy(true)
+      setOneDriveError(null)
+      const result = await connect()
+      setOneDriveConnected(true)
+      setOneDriveEmail(result.email || '')
+    } catch (error) {
+      setOneDriveError(formatOneDriveError(error))
+    } finally {
+      setOneDriveBusy(false)
+    }
+  }
+
+  const handleOneDriveDisconnect = async () => {
+    const api = (window as any).electronAPI
+    if (!api?.storageOneDriveDisconnect) {
+      setOneDriveError(t('Vault backend is not available'))
+      return
+    }
+    try {
+      setOneDriveBusy(true)
+      setOneDriveError(null)
+      await api.storageOneDriveDisconnect()
+      setOneDriveConnected(false)
+      setOneDriveEmail('')
+    } catch (error) {
+      const message = t('Connection failed: {{message}}', { message: (error as Error).message })
+      setOneDriveError(message)
+    } finally {
+      setOneDriveBusy(false)
     }
   }
 
@@ -418,12 +517,24 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
       alert(t('Connect your Google Drive account to continue.'))
       return
     }
+    if (provider === 'onedrive' && !oneDriveConnected) {
+      alert(t('Connect your OneDrive account to continue.'))
+      return
+    }
     if (provider === 'google-drive' && !appAccount?.email) {
+      alert(t('App account required to continue.'))
+      return
+    }
+    if (provider === 'onedrive' && !appAccount?.email) {
       alert(t('App account required to continue.'))
       return
     }
     if (provider === 'google-drive' && !allowGoogle) {
       alert(t('Upgrade to Cloud or BYOS to enable Google Drive.'))
+      return
+    }
+    if (provider === 'onedrive' && !allowOneDrive) {
+      alert(t('Upgrade to Cloud or BYOS to enable OneDrive.'))
       return
     }
     if (provider === 's3-compatible' && !allowS3) {
@@ -567,7 +678,7 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                 {`signedIn=${!!appAccount?.email} `}
                 {`meStatus=${licenseStatus ? `${licenseStatus.email || '-'} / ${licenseStatus.plan || '-'} / ${licenseStatus.isPremium ? 'premium' : 'free'}` : 'none'} `}
                 {`lastLicenseError=${licenseError || 'none'} `}
-                  {`planTier=${planTier} allowGoogle=${allowGoogle} allowS3=${allowS3} allowSupabase=${allowSupabase}`}
+                  {`planTier=${planTier} allowGoogle=${allowGoogle} allowOneDrive=${allowOneDrive} allowS3=${allowS3} allowSupabase=${allowSupabase}`}
                 </div>
               )}
             <div className="provider-selection">
@@ -658,13 +769,20 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                 </div>
               </label>
 
-              <label className="provider-option disabled">
-                <input type="radio" name="provider" value="onedrive" disabled />
+              <label className={`provider-option ${!allowOneDrive ? 'disabled' : ''}`} onClick={() => handleProviderSelect('onedrive')}>
+                <input
+                  type="radio"
+                  name="provider"
+                  value="onedrive"
+                  checked={provider === 'onedrive'}
+                  onChange={() => handleProviderSelect('onedrive')}
+                  disabled={!allowOneDrive}
+                />
                 <img src={oneDriveIconUrl} alt="OneDrive" className="provider-icon" />
                 <div className="provider-info">
                   <div className="provider-title">
-                    <strong>{t('OneDrive')}</strong>
-                    <span className="provider-badge soon">{t('Coming soon')}</span>
+                    <strong>{t('OneDrive (BYO Azure)')}</strong>
+                    <span className="provider-badge recommended">{t('Recommended')}</span>
                   </div>
                   <span>{t('Encrypted OneDrive backup (Tier B)')}</span>
                 </div>
@@ -813,6 +931,109 @@ function StorageSetup({ open, onClose, onConfigured }: StorageSetupProps) {
                     )}
                     {licenseError && <p className="help-text error-text">{licenseError}</p>}
                     {googleError && <p className="help-text error-text">{googleError}</p>}
+                  </div>
+                </>
+              )}
+
+              {provider === 'onedrive' && (
+                <>
+                  <h3>OneDrive</h3>
+                  <div className="step-card">
+                    <div className="step-header">
+                      <span className="step-pill">{t('Step 1')}</span>
+                      <div>
+                        <div className="step-title">{t('Continue with Google')}</div>
+                        <div className="step-sub">{t('Sign in to verify your plan and unlock cloud storage.')}</div>
+                      </div>
+                    </div>
+                    <div className="inline-row">
+                      <input
+                        type="text"
+                        value={appAccount?.email ? t('Signed in as {{email}}', { email: appAccount.email }) : t('Not signed in')}
+                        readOnly
+                        aria-readonly="true"
+                        className="ltr-input readonly-input"
+                      />
+                      {appAccount?.email ? (
+                        <button type="button" className="secondary-btn" onClick={handleAuthLogout} disabled={authBusy}>
+                          {t('Sign out')}
+                        </button>
+                      ) : (
+                        <button type="button" className="secondary-btn" onClick={handleAuthLogin} disabled={authBusy}>
+                          {authBusy ? t('Connecting...') : t('Continue with Google')}
+                        </button>
+                      )}
+                    </div>
+                    {appAccount?.email && (
+                      <div className="status-row">
+                        <span className={`status-pill ${appAccount?.isPremium ? 'premium' : 'free'}`}>
+                          {appAccount?.isPremium ? t('Premium active') : t('Free plan')}
+                        </span>
+                        <span className="status-text">
+                          {t('Plan: {{plan}}', { plan: appAccount?.plan || 'free' })}
+                        </span>
+                      </div>
+                    )}
+                    {authError && <p className="help-text error-text">{authError}</p>}
+                    {licenseError && <p className="help-text error-text">{licenseError}</p>}
+                  </div>
+
+                  <div className="step-card">
+                    <div className="step-header">
+                      <span className="step-pill">{t('Step 2')}</span>
+                      <div>
+                        <div className="step-title">{t('Connect OneDrive')}</div>
+                        <div className="step-sub">{t('Link OneDrive to store encrypted vault snapshots.')}</div>
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>{t('Account')}</label>
+                      <div className="inline-row">
+                        <input
+                          type="text"
+                          value={oneDriveEmail || t('Not connected')}
+                          readOnly
+                          aria-readonly="true"
+                          className={`ltr-input ${oneDriveConnected ? '' : 'readonly-input'}`}
+                          title={oneDriveConnected ? oneDriveEmail : t('Click Connect to link your account')}
+                        />
+                        {oneDriveConnected ? (
+                          <button type="button" className="secondary-btn" onClick={handleOneDriveDisconnect} disabled={oneDriveBusy}>
+                            {t('Disconnect')}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="secondary-btn"
+                            onClick={handleOneDriveConnect}
+                            disabled={oneDriveBusy || !appAccount?.email || !allowOneDrive}
+                          >
+                            {oneDriveBusy ? t('Connecting...') : t('Connect')}
+                          </button>
+                        )}
+                      </div>
+                      <p className="help-text subtle">{t('This field is read-only. Use Connect to link your account.')}</p>
+                    </div>
+                    {oneDriveConnected ? (
+                      <p className="help-text">{t('Drive connected: {{email}}', { email: oneDriveEmail || t('OneDrive') })}</p>
+                    ) : (
+                      <p className="help-text subtle">{t('Drive not connected')}</p>
+                    )}
+                    <p className="help-text subtle">{t('OneDrive requires your own Azure App registration (Client ID).')}</p>
+                    <p className="help-text">{t('OneDrive stores only encrypted vault snapshots. No plaintext ever leaves this device.')}</p>
+                    {!appAccount?.email && <p className="help-text">{t('App account required to continue.')}</p>}
+                    {appAccount?.email && !allowOneDrive && (
+                      <div className="upgrade-inline">
+                        <p className="help-text error-text">
+                          {t('Upgrade to Cloud or BYOS to enable OneDrive.')}
+                        </p>
+                        <button type="button" className="link-btn" onClick={() => window.dispatchEvent(new Event('open-upgrade'))}>
+                          {t('Upgrade')}
+                        </button>
+                      </div>
+                    )}
+                    {licenseError && <p className="help-text error-text">{licenseError}</p>}
+                    {oneDriveError && <p className="help-text error-text">{oneDriveError}</p>}
                   </div>
                 </>
               )}

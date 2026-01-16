@@ -8,7 +8,7 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
   's3-compatible': 'S3-Compatible Storage',
   supabase: 'Supabase Storage',
   dropbox: 'Dropbox (Coming soon)',
-  onedrive: 'OneDrive (Coming soon)'
+  onedrive: 'OneDrive'
 }
 
 export class StorageManager {

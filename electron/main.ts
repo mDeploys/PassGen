@@ -1673,6 +1673,11 @@ ipcMain.handle('vault:importLegacy', async (_event, entries: Array<{ filename: s
   return vaultRepository.importLegacyEntries(entries, masterPassword)
 })
 
+ipcMain.handle('vault:importFromCloud', async (_event, providerId: string, versionId?: string) => {
+  await vaultRepository.importFromCloud(providerId as any, versionId)
+  return { ok: true }
+})
+
 ipcMain.handle('vault:repair', async () => {
   return vaultRepository.repairVault()
 })
@@ -1869,6 +1874,14 @@ ipcMain.handle('storage:googleDriveDisconnect', async () => {
   return vaultRepository.disconnectGoogleDrive()
 })
 
+ipcMain.handle('storage:oneDriveConnect', async () => {
+  return vaultRepository.connectOneDrive()
+})
+
+ipcMain.handle('storage:oneDriveDisconnect', async () => {
+  return vaultRepository.disconnectOneDrive()
+})
+
 // Vault export/import file dialogs
 ipcMain.handle('vault:save', async (_event, data: string) => {
   const { filePath, canceled } = await dialog.showSaveDialog({
@@ -1889,7 +1902,7 @@ ipcMain.handle('vault:save', async (_event, data: string) => {
 ipcMain.handle('vault:open', async () => {
   const { filePaths, canceled } = await dialog.showOpenDialog({
     title: 'Import Vault Backup',
-    filters: [{ name: 'JSON', extensions: ['json'] }],
+    filters: [{ name: 'Vault Backup', extensions: ['pgvault', 'json'] }],
     properties: ['openFile']
   })
   if (canceled || !filePaths || filePaths.length === 0) return { success: false }

@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import http from 'http'
+import * as crypto from 'crypto'
 import { app, shell } from 'electron'
 import CryptoJS from 'crypto-js'
 import { google } from 'googleapis'
@@ -11,6 +12,8 @@ import type {
   VaultFile,
   VaultFileHeader,
   GoogleDriveProviderConfig,
+  OneDriveProviderConfig,
+  OneDriveTokens,
   S3CompatibleProviderConfig,
   SupabaseStorageProviderConfig,
   AppAccountSession,
@@ -30,12 +33,20 @@ import { GoogleDriveProvider, type GoogleOAuthConfig } from './providers/googleD
 import { S3CompatibleProvider } from './providers/s3CompatibleProvider'
 import { SupabaseStorageProvider } from './providers/supabaseStorageProvider'
 import { DropboxProvider } from './providers/dropboxProvider'
-import { OneDriveProvider } from './providers/oneDriveProvider'
+import { OneDriveProvider, type OneDriveOAuthConfig } from './providers/oneDriveProvider'
 import type { StorageProvider } from './providers/storageProvider'
 
 const DEFAULT_BACKUP_COUNT = 10
 const DEFAULT_CLOUD_RETENTION = 10
 const VAULT_FILE_NAME = 'passgen-vault.pgvault'
+
+function toBase64Url(buffer: Buffer): string {
+  return buffer
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+}
 
 export interface StorageConfigInput {
   provider: ProviderId
@@ -54,6 +65,7 @@ export class VaultRepository {
   private derivedKey: Buffer | null = null
   private pendingConfig: StorageConfigInput | null = null
   private pendingGoogleDrive: GoogleDriveProviderConfig | null = null
+  private pendingOneDrive: OneDriveProviderConfig | null = null
   private pendingAppAccount: AppAccountSession | null = null
   private syncedFromCloud = false
 
@@ -70,6 +82,7 @@ export class VaultRepository {
     activeProviderId: ProviderId
     local: { vaultFolder: string; backupsEnabled: boolean; keepLast: number }
     googleDrive: { connected: boolean; email?: string }
+    oneDrive: { connected: boolean; email?: string }
     s3Compatible: { configured: boolean }
     supabase: { configured: boolean }
   } {
@@ -86,6 +99,10 @@ export class VaultRepository {
       googleDrive: {
         connected: !!(payload?.providerConfigs.googleDrive?.tokens || this.pendingGoogleDrive?.tokens),
         email: payload?.providerConfigs.googleDrive?.accountEmail || this.pendingGoogleDrive?.accountEmail
+      },
+      oneDrive: {
+        connected: !!(payload?.providerConfigs.onedrive?.tokens || this.pendingOneDrive?.tokens),
+        email: payload?.providerConfigs.onedrive?.accountEmail || this.pendingOneDrive?.accountEmail
       },
       s3Compatible: {
         configured: !!payload?.providerConfigs.s3Compatible
@@ -354,6 +371,41 @@ export class VaultRepository {
     this.vaultPayload.providerConfigs.googleDrive = config
   }
 
+  async connectOneDrive(): Promise<{ email: string; provider: 'onedrive'; token: any }> {
+    const oauthConfig = this.getOneDriveOAuthConfig()
+    if (!oauthConfig) {
+      throw new Error('OneDrive OAuth credentials are not configured')
+    }
+
+    const { tokens, email } = await this.startOneDriveOAuth(oauthConfig)
+    const config: OneDriveProviderConfig = {
+      tokens,
+      accountEmail: email
+    }
+
+    if (this.vaultPayload) {
+      this.setOneDriveConfig(config)
+      await this.persistVault()
+    } else {
+      this.pendingOneDrive = config
+    }
+
+    return { email, provider: 'onedrive', token: tokens }
+  }
+
+  async disconnectOneDrive(): Promise<void> {
+    if (this.vaultPayload) {
+      this.vaultPayload.providerConfigs.onedrive = undefined
+      await this.persistVault()
+    }
+    this.pendingOneDrive = null
+  }
+
+  private setOneDriveConfig(config: OneDriveProviderConfig): void {
+    if (!this.vaultPayload) return
+    this.vaultPayload.providerConfigs.onedrive = config
+  }
+
   private async syncFromCloudIfNeeded(): Promise<void> {
     if (this.syncedFromCloud) return
     const provider = await this.getActiveProvider()
@@ -383,9 +435,34 @@ export class VaultRepository {
     }
   }
 
+  async importFromCloud(providerId: ProviderId, versionId?: string): Promise<void> {
+    await this.ensureUnlocked()
+    const provider = await this.getProviderById(providerId)
+    if (!provider) {
+      throw new Error('Provider is not configured')
+    }
+    if (!provider.isConfigured()) {
+      throw new Error('Provider is not configured')
+    }
+
+    const encrypted = versionId ? await provider.restoreVersion(versionId) : await provider.download()
+    const raw = encrypted.toString('utf8')
+    const parsed = parseVaultFile(raw)
+    if (this.vaultHeader && parsed.header.salt !== this.vaultHeader.salt) {
+      throw new Error('Vault key mismatch. Please re-enter your master password.')
+    }
+    const payload = await decryptVaultFileWithKey(parsed, this.derivedKey as Buffer)
+    this.vaultPayload = payload
+    this.vaultHeader = parsed.header
+    await this.writeLocalVault(parsed)
+  }
+
   private async getActiveProvider(): Promise<StorageProvider | null> {
-    const active = getActiveProviderId()
-    switch (active) {
+    return this.getProviderById(getActiveProviderId())
+  }
+
+  private async getProviderById(providerId: ProviderId): Promise<StorageProvider | null> {
+    switch (providerId) {
       case 'google-drive': {
         const config = this.vaultPayload?.providerConfigs.googleDrive
         if (!config?.tokens) return null
@@ -405,8 +482,19 @@ export class VaultRepository {
       }
       case 'dropbox':
         return new DropboxProvider()
-      case 'onedrive':
-        return new OneDriveProvider()
+      case 'onedrive': {
+        const config = this.vaultPayload?.providerConfigs.onedrive
+        if (!config?.tokens) return null
+        const oauthConfig = this.getOneDriveOAuthConfig()
+        if (!oauthConfig) throw new Error('OneDrive OAuth credentials are not configured')
+        return new OneDriveProvider(config, oauthConfig, (tokens) => {
+          try {
+            this.setOneDriveConfig({ ...config, tokens })
+          } catch {
+            // ignore token updates
+          }
+        })
+      }
       default:
         return null
     }
@@ -491,6 +579,12 @@ export class VaultRepository {
       this.pendingGoogleDrive = null
     }
 
+    if (this.pendingOneDrive) {
+      this.setOneDriveConfig(this.pendingOneDrive)
+      await this.persistVault()
+      this.pendingOneDrive = null
+    }
+
     if (this.pendingAppAccount) {
       this.vaultPayload.appAccount = this.pendingAppAccount
       await this.persistVault()
@@ -543,6 +637,34 @@ export class VaultRepository {
       clientId,
       clientSecret,
       redirectUri: 'http://127.0.0.1'
+    }
+  }
+
+  private getOneDriveOAuthConfig(): OneDriveOAuthConfig | null {
+    const clientId = process.env.PASSGEN_ONEDRIVE_CLIENT_ID || process.env.ONEDRIVE_CLIENT_ID
+    const tenant = process.env.PASSGEN_ONEDRIVE_TENANT || process.env.ONEDRIVE_TENANT || 'common'
+    if (!clientId) {
+      console.warn('[OAuth] Missing OneDrive OAuth env var: PASSGEN_ONEDRIVE_CLIENT_ID/ONEDRIVE_CLIENT_ID')
+      return null
+    }
+    return {
+      clientId,
+      tenant,
+      scopes: ['offline_access', 'User.Read', 'Files.ReadWrite.AppFolder']
+    }
+  }
+
+  private normalizeOneDriveTokens(payload: any): OneDriveTokens {
+    const accessToken = payload.access_token || payload.accessToken || ''
+    const refreshToken = payload.refresh_token || payload.refreshToken
+    const expiresIn = Number(payload.expires_in || payload.expiresIn || 0)
+    const expiresAt = payload.expires_at || payload.expiresAt || (expiresIn ? Date.now() + expiresIn * 1000 : undefined)
+    return {
+      accessToken,
+      refreshToken,
+      expiresAt,
+      scope: payload.scope,
+      tokenType: payload.token_type || payload.tokenType
     }
   }
 
@@ -625,5 +747,98 @@ export class VaultRepository {
     await shell.openExternal(authUrl)
     const code = await codePromise
     return { oauth2Client, code }
+  }
+
+  private async startOneDriveOAuth(oauthConfig: OneDriveOAuthConfig): Promise<{ tokens: OneDriveTokens; email: string }> {
+    const server = http.createServer()
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()))
+
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+      server.close()
+      throw new Error('Failed to start local OAuth server')
+    }
+
+    const redirectUri = `http://127.0.0.1:${address.port}/oauth2callback`
+    const codeVerifier = toBase64Url(crypto.randomBytes(32))
+    const codeChallenge = toBase64Url(crypto.createHash('sha256').update(codeVerifier).digest())
+    const params = new URLSearchParams({
+      client_id: oauthConfig.clientId,
+      response_type: 'code',
+      redirect_uri: redirectUri,
+      response_mode: 'query',
+      scope: oauthConfig.scopes.join(' '),
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+      prompt: 'select_account'
+    })
+    const authUrl = `https://login.microsoftonline.com/${oauthConfig.tenant}/oauth2/v2.0/authorize?${params.toString()}`
+
+    const codePromise = new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        server.close()
+        reject(new Error('OneDrive authentication timed out'))
+      }, 120000)
+
+      server.on('request', (req, res) => {
+        try {
+          const url = new URL(req.url || '/', redirectUri)
+          const code = url.searchParams.get('code')
+          if (code) {
+            res.writeHead(200, { 'Content-Type': 'text/html' })
+            res.end('<h3>PassGen connected. You can return to the app.</h3>')
+            clearTimeout(timeout)
+            server.close()
+            resolve(code)
+          } else {
+            res.writeHead(400)
+            res.end('Missing code')
+          }
+        } catch (error) {
+          clearTimeout(timeout)
+          server.close()
+          reject(error)
+        }
+      })
+    })
+
+    await shell.openExternal(authUrl)
+    const code = await codePromise
+
+    const body = new URLSearchParams()
+    body.set('client_id', oauthConfig.clientId)
+    body.set('grant_type', 'authorization_code')
+    body.set('code', code)
+    body.set('redirect_uri', redirectUri)
+    body.set('code_verifier', codeVerifier)
+    body.set('scope', oauthConfig.scopes.join(' '))
+
+    const tokenResponse = await fetch(`https://login.microsoftonline.com/${oauthConfig.tenant}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body
+    })
+    const tokenText = await tokenResponse.text()
+    if (!tokenResponse.ok) {
+      throw new Error(tokenText || `OneDrive token exchange failed (${tokenResponse.status})`)
+    }
+    const tokenPayload = JSON.parse(tokenText)
+    const tokens = this.normalizeOneDriveTokens(tokenPayload)
+
+    if (!tokens.accessToken) {
+      throw new Error('OneDrive authentication failed')
+    }
+
+    const meResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
+      headers: { Authorization: `Bearer ${tokens.accessToken}` }
+    })
+    const meText = await meResponse.text()
+    if (!meResponse.ok) {
+      throw new Error(meText || `OneDrive user lookup failed (${meResponse.status})`)
+    }
+    const me = JSON.parse(meText || '{}')
+    const email = me.mail || me.userPrincipalName || 'OneDrive Account'
+
+    return { tokens, email }
   }
 }

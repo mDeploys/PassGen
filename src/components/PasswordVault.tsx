@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { PasswordEntry } from '../services/encryption'
 import { StorageManager } from '../services/storageManager'
+import type { ProviderId } from '../services/storageTypes'
 import './PasswordVault.css'
 import { copyText } from '../services/clipboard'
-import { getEntryLimit, getPremiumTier } from '../services/license'
+import { getEntryLimit, getPremiumTier, isProviderAllowed } from '../services/license'
 import { useI18n } from '../services/i18n'
 
 interface PasswordVaultProps {
@@ -32,6 +33,16 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
   const [copyMessageType, setCopyMessageType] = useState<'ok' | 'error' | ''>('')
   const [providerLabel, setProviderLabel] = useState(storageManager.getCurrentProvider())
   const [premiumTier, setPremiumTier] = useState(getPremiumTier())
+  const [showCloudImport, setShowCloudImport] = useState(false)
+  const [cloudImportProvider, setCloudImportProvider] = useState<ProviderId>('google-drive')
+  const [cloudImportBusy, setCloudImportBusy] = useState(false)
+  const [cloudImportError, setCloudImportError] = useState<string | null>(null)
+  const [cloudConfigStatus, setCloudConfigStatus] = useState({
+    googleDrive: { connected: false, email: '' },
+    oneDrive: { connected: false, email: '' },
+    s3Compatible: false,
+    supabase: false
+  })
 
   useEffect(() => {
     loadEntries()
@@ -89,6 +100,48 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
     window.addEventListener('premium-changed', handlePremiumChange)
     return () => window.removeEventListener('premium-changed', handlePremiumChange)
   }, [])
+
+  useEffect(() => {
+    if (!showCloudImport) return
+    const api = (window as any).electronAPI
+    if (!api?.storageProviderStatus) return
+
+    setCloudImportError(null)
+    ;(async () => {
+      try {
+        const status = await api.storageProviderStatus()
+        const googleConnected = !!status?.googleDrive?.connected
+        const googleEmail = status?.googleDrive?.email || ''
+        const s3Configured = !!status?.s3Compatible?.configured
+        const supabaseConfigured = !!status?.supabase?.configured
+        const oneDriveConnected = !!status?.oneDrive?.connected
+        const oneDriveEmail = status?.oneDrive?.email || ''
+        setCloudConfigStatus({
+          googleDrive: { connected: googleConnected, email: googleEmail },
+          oneDrive: { connected: oneDriveConnected, email: oneDriveEmail },
+          s3Compatible: s3Configured,
+          supabase: supabaseConfigured
+        })
+
+        const active = status?.activeProviderId as ProviderId | undefined
+        if (active && active !== 'local' && active !== 'dropbox') {
+          setCloudImportProvider(active)
+          return
+        }
+
+        const preferred: ProviderId | null =
+          (googleConnected ? 'google-drive' : null) ||
+          (oneDriveConnected ? 'onedrive' : null) ||
+          (s3Configured ? 's3-compatible' : null) ||
+          (supabaseConfigured ? 'supabase' : null) ||
+          null
+        if (preferred) setCloudImportProvider(preferred)
+      } catch (error) {
+        console.warn('Failed to load provider status', error)
+        setCloudImportError(t('Connection failed: {{message}}', { message: (error as Error).message }))
+      }
+    })()
+  }, [showCloudImport, t])
 
   const loadEntries = async () => {
     try {
@@ -216,6 +269,69 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
       alert(t('Import failed: {{message}}', { message: (e as Error).message }))
     } finally {
       setLoading(false)
+    }
+  }
+
+  const getUpgradeMessage = (providerId: ProviderId) => {
+    if (providerId === 'google-drive') return t('Upgrade to Cloud or BYOS to enable Google Drive.')
+    if (providerId === 'onedrive') return t('Upgrade to Cloud or BYOS to enable OneDrive.')
+    if (providerId === 's3-compatible') return t('Upgrade to BYOS to enable S3-compatible storage.')
+    if (providerId === 'supabase') return t('Upgrade to BYOS to enable Supabase Storage.')
+    return t('Upgrade to access this provider.')
+  }
+
+  const openCloudImport = () => {
+    setCloudImportError(null)
+    setShowCloudImport(true)
+  }
+
+  const handleCloudImport = async () => {
+    if (premiumTier === 'free') {
+      alert(t('Import Vault Backup is a Premium feature. Upgrade to Premium to restore backups.'))
+      window.dispatchEvent(new Event('open-upgrade'))
+      return
+    }
+
+    if (!isProviderAllowed(cloudImportProvider, premiumTier)) {
+      setCloudImportError(getUpgradeMessage(cloudImportProvider))
+      window.dispatchEvent(new Event('open-upgrade'))
+      return
+    }
+
+    const configuredMap: Record<ProviderId, boolean> = {
+      local: false,
+      'google-drive': cloudConfigStatus.googleDrive.connected,
+      onedrive: cloudConfigStatus.oneDrive.connected,
+      's3-compatible': cloudConfigStatus.s3Compatible,
+      supabase: cloudConfigStatus.supabase,
+      dropbox: false,
+    }
+
+    if (!configuredMap[cloudImportProvider]) {
+      setCloudImportError(t('Not configured'))
+      return
+    }
+
+    if (!confirm(t('Importing will replace your current vault. Make sure you have a backup! Continue?'))) return
+
+    const api = (window as any).electronAPI
+    if (!api?.vaultImportFromCloud) {
+      setCloudImportError(t('Vault backend is not available'))
+      return
+    }
+
+    try {
+      setCloudImportBusy(true)
+      setCloudImportError(null)
+      await api.vaultImportFromCloud(cloudImportProvider)
+      await loadEntries()
+      setShowCloudImport(false)
+      alert(t('Cloud import complete.'))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setCloudImportError(t('Cloud import failed: {{message}}', { message }))
+    } finally {
+      setCloudImportBusy(false)
     }
   }
 
@@ -382,6 +498,7 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
                 <>
                   <button onClick={handleExport} disabled={loading}>{t('Export Vault Backup')}</button>
                   <button onClick={handleImport} disabled={loading}>{t('Import Vault Backup')}</button>
+                  <button onClick={openCloudImport} disabled={loading}>{t('Import from Cloud')}</button>
                   <button onClick={exportToCSV}>{t('Export to CSV')}</button>
                 </>
               )}
@@ -584,6 +701,90 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
           {t('All passwords are encrypted with your master password')}
         </div>
       </div>
+
+      {showCloudImport && (
+        <div className="modal-backdrop">
+          <div className="modal cloud-import-modal">
+            <h2>{t('Import from Cloud')}</h2>
+            <p className="modal-sub">{t('Select a provider to restore your encrypted vault.')}</p>
+            <div className="cloud-import-options">
+              <label className={`cloud-import-option ${cloudImportProvider === 'google-drive' ? 'selected' : ''}`}>
+                <input
+                  type="radio"
+                  name="cloud-import-provider"
+                  checked={cloudImportProvider === 'google-drive'}
+                  onChange={() => setCloudImportProvider('google-drive')}
+                />
+                <img src="/google-drive.png" alt="Google Drive" />
+                <div className="cloud-import-meta">
+                  <span className="cloud-import-name">Google Drive</span>
+                  <span className="cloud-import-status">
+                    {cloudConfigStatus.googleDrive.connected
+                      ? (cloudConfigStatus.googleDrive.email || t('Connected'))
+                      : t('Not configured')}
+                  </span>
+                </div>
+              </label>
+              <label className={`cloud-import-option ${cloudImportProvider === 's3-compatible' ? 'selected' : ''}`}>
+                <input
+                  type="radio"
+                  name="cloud-import-provider"
+                  checked={cloudImportProvider === 's3-compatible'}
+                  onChange={() => setCloudImportProvider('s3-compatible')}
+                />
+                <img src="/aws-s3.svg" alt="S3-Compatible" />
+                <div className="cloud-import-meta">
+                  <span className="cloud-import-name">S3-Compatible</span>
+                  <span className="cloud-import-status">
+                    {cloudConfigStatus.s3Compatible ? t('Connected') : t('Not configured')}
+                  </span>
+                </div>
+              </label>
+              <label className={`cloud-import-option ${cloudImportProvider === 'supabase' ? 'selected' : ''}`}>
+                <input
+                  type="radio"
+                  name="cloud-import-provider"
+                  checked={cloudImportProvider === 'supabase'}
+                  onChange={() => setCloudImportProvider('supabase')}
+                />
+                <img src="/supabase.svg" alt="Supabase" />
+                <div className="cloud-import-meta">
+                  <span className="cloud-import-name">Supabase</span>
+                  <span className="cloud-import-status">
+                    {cloudConfigStatus.supabase ? t('Connected') : t('Not configured')}
+                  </span>
+                </div>
+              </label>
+              <label className={`cloud-import-option ${cloudImportProvider === 'onedrive' ? 'selected' : ''}`}>
+                <input
+                  type="radio"
+                  name="cloud-import-provider"
+                  checked={cloudImportProvider === 'onedrive'}
+                  onChange={() => setCloudImportProvider('onedrive')}
+                />
+                <img src="/onedrive.svg" alt="OneDrive" />
+                <div className="cloud-import-meta">
+                  <span className="cloud-import-name">{t('OneDrive (BYO Azure)')}</span>
+                  <span className="cloud-import-status">
+                    {cloudConfigStatus.oneDrive.connected
+                      ? (cloudConfigStatus.oneDrive.email || t('Connected'))
+                      : t('Not configured')}
+                  </span>
+                </div>
+              </label>
+            </div>
+            {cloudImportError && <div className="cloud-import-error">{cloudImportError}</div>}
+            <div className="cloud-import-actions">
+              <button className="btn-secondary" onClick={() => setShowCloudImport(false)} disabled={cloudImportBusy}>
+                {t('Cancel')}
+              </button>
+              <button className="btn-primary" onClick={handleCloudImport} disabled={cloudImportBusy}>
+                {cloudImportBusy ? t('Importing...') : t('Import Latest')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

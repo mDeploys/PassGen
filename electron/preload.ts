@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   vaultExportEncrypted: () => ipcRenderer.invoke('vault:exportEncrypted'),
   vaultImportEncrypted: (data: string) => ipcRenderer.invoke('vault:importEncrypted', data),
   vaultImportLegacy: (entries: Array<{ filename: string; data: string }>, masterPassword: string) => ipcRenderer.invoke('vault:importLegacy', entries, masterPassword),
+  vaultImportFromCloud: (providerId: string, versionId?: string) => ipcRenderer.invoke('vault:importFromCloud', providerId, versionId),
   vaultRepair: () => ipcRenderer.invoke('vault:repair'),
   storageConfigure: (config: any) => ipcRenderer.invoke('storage:configure', config),
   storageProviderStatus: () => ipcRenderer.invoke('storage:providerStatus'),
@@ -67,6 +68,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   oauthGoogleDrive: () => ipcRenderer.invoke('oauth:google'),
   storageGoogleDriveConnect: () => ipcRenderer.invoke('storage:googleDriveConnect'),
   storageGoogleDriveDisconnect: () => ipcRenderer.invoke('storage:googleDriveDisconnect'),
+  storageOneDriveConnect: () => ipcRenderer.invoke('storage:oneDriveConnect'),
+  storageOneDriveDisconnect: () => ipcRenderer.invoke('storage:oneDriveDisconnect'),
   authLogin: (deviceId: string) => ipcRenderer.invoke('auth:login', deviceId),
   authGetSession: () => ipcRenderer.invoke('auth:getSession'),
   authGetMe: () => ipcRenderer.invoke('auth:getMe'),
@@ -110,6 +113,7 @@ declare global {
       vaultExportEncrypted: () => Promise<string>
       vaultImportEncrypted: (data: string) => Promise<void>
       vaultImportLegacy: (entries: Array<{ filename: string; data: string }>, masterPassword: string) => Promise<{ imported: number; skipped: number }>
+      vaultImportFromCloud: (providerId: string, versionId?: string) => Promise<{ ok: boolean }>
       vaultRepair: () => Promise<{ total: number; kept: number; migrated: number; removed: number }>
       storageConfigure: (config: any) => Promise<void>
       storageProviderStatus: () => Promise<any>
@@ -124,6 +128,8 @@ declare global {
       oauthGoogleDrive: () => Promise<{ email: string; provider: 'google-drive'; token: any }>
       storageGoogleDriveConnect: () => Promise<{ email: string; provider: 'google-drive'; token: any }>
       storageGoogleDriveDisconnect: () => Promise<void>
+      storageOneDriveConnect: () => Promise<{ email: string; provider: 'onedrive'; token: any }>
+      storageOneDriveDisconnect: () => Promise<void>
       authLogin: (deviceId: string) => Promise<{ ok: boolean }>
       authGetSession: () => Promise<{ email?: string; userId?: string; plan?: string; isPremium?: boolean; expiresAt?: string | null } | null>
       authGetMe: () => Promise<{ userId: string; email: string; plan: string; isPremium: boolean; expiresAt: string | null }>

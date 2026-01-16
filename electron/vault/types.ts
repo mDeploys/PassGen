@@ -28,6 +28,19 @@ export interface GoogleDriveProviderConfig {
   accountEmail?: string
 }
 
+export interface OneDriveTokens {
+  accessToken: string
+  refreshToken?: string
+  expiresAt?: number
+  scope?: string
+  tokenType?: string
+}
+
+export interface OneDriveProviderConfig {
+  tokens?: OneDriveTokens
+  accountEmail?: string
+}
+
 export interface S3CompatibleProviderConfig {
   accessKeyId: string
   secretAccessKey: string
@@ -49,10 +62,10 @@ export interface ProviderConfigs {
   activeProviderId?: ProviderId
   local?: LocalProviderConfig
   googleDrive?: GoogleDriveProviderConfig
+  onedrive?: OneDriveProviderConfig
   s3Compatible?: S3CompatibleProviderConfig
   supabase?: SupabaseStorageProviderConfig
   dropbox?: Record<string, never>
-  onedrive?: Record<string, never>
 }
 
 export interface AppAccountSession {

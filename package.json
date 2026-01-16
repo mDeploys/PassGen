@@ -1,6 +1,6 @@
 {
   "name": "passgen",
-  "version": "1.0.10",
+  "version": "1.0.12",
   "description": "A Vault secure password generator desktop application",
   "engines": {
     "node": ">=20.0.0"
@@ -94,7 +94,7 @@
       "displayName": "PassGen Secrets Vault",
       "publisher": "CN=92CE8CEC-534B-45DF-B9FE-D346FD430CC0",
       "publisherDisplayName": "Jalal Nasser",
-      "backgroundColor": "#0B0A14"
+      "backgroundColor": "#EDE9FE"
     },
     "nsis": {
       "oneClick": false,

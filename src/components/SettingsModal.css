@@ -81,6 +81,31 @@
   color: #6b21a8;
 }
 
+.settings-location-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-path-input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #ddd6fe;
+  font-size: 0.85rem;
+  background: #ffffff;
+}
+
+.settings-location-sub {
+  font-size: 0.78rem;
+  color: #6b21a8;
+}
+
+.settings-location-error {
+  font-size: 0.78rem;
+  color: #b91c1c;
+}
+
 .settings-passkey-card {
   border: 1px solid #c4b5fd;
   border-radius: 12px;
@@ -156,5 +181,10 @@ html[dir="rtl"] .settings-toggle {
 @media (max-width: 640px) {
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .settings-location-card {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

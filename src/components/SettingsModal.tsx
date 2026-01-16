@@ -3,6 +3,7 @@ import './UpgradeModal.css'
 import './SettingsModal.css'
 import { useI18n } from '../services/i18n'
 import { ConfigStore } from '../services/configStore'
+import type { ProviderId } from '../services/storageTypes'
 import googleIconSvg from '../assets/google-g.svg?raw'
 
 const googleIconUrl = `data:image/svg+xml;utf8,${encodeURIComponent(googleIconSvg)}`
@@ -21,6 +22,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     return !!store.getPasskeyCredential()?.credentialId
   })
   const [minimizeToTray, setMinimizeToTray] = useState(true)
+  const [vaultPath, setVaultPath] = useState('')
+  const [vaultLocationError, setVaultLocationError] = useState<string | null>(null)
+  const [vaultLocationBusy, setVaultLocationBusy] = useState(false)
+  const [localBackupsEnabled, setLocalBackupsEnabled] = useState(true)
+  const [localKeepLast, setLocalKeepLast] = useState(10)
+  const [activeProviderId, setActiveProviderId] = useState<ProviderId>('local')
 
   useEffect(() => {
     if (!open) return
@@ -34,6 +41,38 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       })
       .catch(() => {})
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const api = (window as any).electronAPI
+    if (!api?.storageProviderStatus && !api?.vaultStatus) return
+
+    const loadLocation = async () => {
+      try {
+        const status = await api.storageProviderStatus?.()
+        if (status?.activeProviderId) {
+          setActiveProviderId(status.activeProviderId as ProviderId)
+        }
+        if (status?.local) {
+          setLocalBackupsEnabled(status.local.backupsEnabled ?? true)
+          setLocalKeepLast(status.local.keepLast ?? 10)
+        }
+      } catch {
+        // Ignore provider status fetch errors here
+      }
+
+      try {
+        const vaultStatus = await api.vaultStatus?.()
+        if (vaultStatus?.vaultPath) {
+          setVaultPath(vaultStatus.vaultPath)
+        }
+      } catch {
+        // Ignore vault status fetch errors here
+      }
+    }
+
+    loadLocation()
+  }, [open])
   const openPremiumSignIn = () => {
     onClose()
     window.dispatchEvent(new Event('open-storage-setup'))
@@ -45,6 +84,55 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const handleResetApp = () => {
     onClose()
     window.dispatchEvent(new Event('reset-app'))
+  }
+
+  const handleChangeVaultFolder = async () => {
+    const api = (window as any).electronAPI
+    if (!api?.storageSelectVaultFolder || !api?.storageConfigure) {
+      setVaultLocationError(t('Vault backend is not available'))
+      return
+    }
+    try {
+      setVaultLocationBusy(true)
+      setVaultLocationError(null)
+      const result = await api.storageSelectVaultFolder()
+      if (!result?.success || !result.folder) return
+
+      const config = {
+        provider: activeProviderId,
+        local: {
+          vaultFolder: result.folder,
+          backupsEnabled: localBackupsEnabled,
+          keepLast: localKeepLast
+        }
+      }
+      await api.storageConfigure(config)
+      try {
+        const store = new ConfigStore()
+        const existing = store.getStorageConfig() || { provider: activeProviderId }
+        store.setStorageConfig({
+          ...existing,
+          provider: activeProviderId,
+          local: {
+            ...existing.local,
+            vaultFolder: result.folder,
+            backupsEnabled: localBackupsEnabled,
+            keepLast: localKeepLast
+          }
+        })
+      } catch (error) {
+        console.warn('Failed to cache storage config locally:', error)
+      }
+
+      const vaultStatus = await api.vaultStatus?.()
+      if (vaultStatus?.vaultPath) {
+        setVaultPath(vaultStatus.vaultPath)
+      }
+    } catch (error) {
+      setVaultLocationError(t('Failed to update vault location: {{message}}', { message: (error as Error).message }))
+    } finally {
+      setVaultLocationBusy(false)
+    }
   }
   const handleSetupPasskey = async () => {
     try {
@@ -174,6 +262,28 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 </button>
               </div>
             </div>
+          </div>
+          <div className="settings-section settings-section--full">
+            <label>{t('Local Vault Location')}</label>
+            <div className="settings-location-card">
+              <input
+                type="text"
+                value={vaultPath || t('Not available')}
+                readOnly
+                className="settings-path-input ltr-input"
+              />
+              <button
+                className="btn-secondary"
+                onClick={handleChangeVaultFolder}
+                disabled={vaultLocationBusy}
+              >
+                {vaultLocationBusy ? t('Updating...') : t('Change Folder')}
+              </button>
+            </div>
+            <div className="settings-location-sub">
+              {t('Your encrypted vault file is stored locally. Changing the folder will move it if found.')}
+            </div>
+            {vaultLocationError && <div className="settings-location-error">{vaultLocationError}</div>}
           </div>
           <div className="settings-section">
             <label>{t('Setup Passkey')}</label>

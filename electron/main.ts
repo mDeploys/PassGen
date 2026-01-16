@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, dialog, clipboard, protocol, safeStorage, Tray, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Menu, dialog, clipboard, protocol, safeStorage, Tray, nativeImage, screen } from 'electron'
 import { execSync } from 'child_process'
 import Store from 'electron-store'
 import * as http from 'http'
@@ -375,73 +375,68 @@ function buildUpdateHtml(tag: string, url: string) {
       body {
         margin: 0;
         font-family: "Segoe UI", "Inter", sans-serif;
-        background: #f5f3ff;
+        background: transparent;
         color: #1f2937;
       }
-      .frame {
-        margin: 16px;
+      .toast {
+        margin: 10px;
         border-radius: 16px;
-        padding: 16px 18px 14px;
-        border: 1px solid rgba(196, 181, 253, 0.9);
-        box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.18), 0 16px 32px rgba(76, 29, 149, 0.18);
-        background: linear-gradient(160deg, #ffffff, #ede9fe);
+        padding: 14px 16px;
+        border: 1px solid rgba(196, 181, 253, 0.7);
+        background: linear-gradient(135deg, #ffffff, #ede9fe);
+        box-shadow: 0 20px 40px rgba(76, 29, 149, 0.25);
       }
       .header {
         display: flex;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: 10px;
       }
       .icon {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: rgba(139, 92, 246, 0.12);
-        border: 2px solid rgba(139, 92, 246, 0.5);
-        color: #6d28d9;
-        font-weight: 700;
-        font-size: 18px;
+        background: rgba(139, 92, 246, 0.14);
+        border: 1px solid rgba(139, 92, 246, 0.45);
         overflow: hidden;
       }
       .icon img {
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
         object-fit: contain;
       }
       h1 {
-        font-size: 18px;
+        font-size: 16px;
         margin: 0;
         font-weight: 700;
         color: #312e81;
       }
       .subtitle {
-        margin: 6px 0 14px;
+        margin: 8px 0 10px;
         color: #4c1d95;
-        font-size: 13px;
+        font-size: 12.5px;
       }
       .actions {
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
+        gap: 8px;
       }
       button {
-        padding: 8px 14px;
+        padding: 7px 12px;
         border-radius: 10px;
         border: 1px solid transparent;
         cursor: pointer;
         font-weight: 700;
         background: linear-gradient(130deg, #6d28d9, #8b5cf6);
         color: #ffffff;
-        box-shadow: 0 10px 22px rgba(109, 40, 217, 0.25);
+        box-shadow: 0 10px 18px rgba(109, 40, 217, 0.22);
       }
       button.secondary {
-        background: #f5f3ff;
-        border: 1px solid rgba(139, 92, 246, 0.4);
+        background: transparent;
+        border: 1px solid rgba(139, 92, 246, 0.35);
         color: #5b21b6;
         box-shadow: none;
       }
@@ -453,13 +448,12 @@ function buildUpdateHtml(tag: string, url: string) {
     </style>
   </head>
   <body>
-    <div class="frame">
+    <div class="toast">
       <div class="header">
         <div class="icon">${iconUrl ? `<img src="${iconUrl}" alt="PassGen" />` : '!'}</div>
         <h1>Update Available</h1>
       </div>
-      <div class="subtitle">A new version ${safeTag || 'is available'}.</div>
-      <div class="subtitle">Click Download to open the releases page.</div>
+      <div class="subtitle">A new version ${safeTag || 'is available'} is ready to download.</div>
       <div class="actions">
         <button id="downloadBtn" ${downloadDisabled ? 'disabled' : ''}>Download</button>
         <button class="secondary" id="laterBtn">Later</button>
@@ -1116,13 +1110,19 @@ function showUpdateDialog(tag: string, url: string) {
     return
   }
   updateWindow = new BrowserWindow({
-    width: 420,
-    height: 240,
+    width: 360,
+    height: 150,
     resizable: false,
     minimizable: false,
     maximizable: false,
-    parent: mainWindow || undefined,
-    modal: true,
+    fullscreenable: false,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    autoHideMenuBar: true,
     title: 'Update Available',
     icon: resolveIconPath(),
     webPreferences: {
@@ -1131,7 +1131,17 @@ function showUpdateDialog(tag: string, url: string) {
       webSecurity: true
     }
   })
-  updateWindow.once('ready-to-show', () => updateWindow?.show())
+  updateWindow.setMenuBarVisibility(false)
+  updateWindow.setMenu(null)
+  updateWindow.once('ready-to-show', () => {
+    if (!updateWindow) return
+    const { width, height } = updateWindow.getBounds()
+    const { workArea } = screen.getPrimaryDisplay()
+    const x = Math.max(workArea.x, workArea.x + workArea.width - width - 16)
+    const y = Math.max(workArea.y, workArea.y + workArea.height - height - 16)
+    updateWindow.setPosition(x, y, false)
+    updateWindow.showInactive()
+  })
   updateWindow.on('closed', () => {
     updateWindow = null
   })

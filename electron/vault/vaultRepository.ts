@@ -97,12 +97,15 @@ export class VaultRepository {
   }
 
   async configureStorage(config: StorageConfigInput): Promise<void> {
-    setActiveProviderId(config.provider)
+    const previousPath = this.getVaultPath()
 
     if (config.local?.vaultFolder) {
       const vaultPath = path.join(config.local.vaultFolder, VAULT_FILE_NAME)
+      await this.copyVaultIfNeeded(previousPath, vaultPath)
       setLocalVaultPath(vaultPath)
     }
+
+    setActiveProviderId(config.provider)
 
     this.pendingConfig = config
     this.syncedFromCloud = false
@@ -112,6 +115,15 @@ export class VaultRepository {
       await this.persistVault()
       this.pendingConfig = null
     }
+  }
+
+  private async copyVaultIfNeeded(previousPath: string, nextPath: string): Promise<void> {
+    if (!previousPath || previousPath === nextPath) return
+    if (!fs.existsSync(previousPath)) return
+    if (fs.existsSync(nextPath)) return
+
+    await fs.promises.mkdir(path.dirname(nextPath), { recursive: true })
+    await fs.promises.copyFile(previousPath, nextPath)
   }
 
   getAppAccountSession(): AppAccountSession | null {

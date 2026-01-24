@@ -53,7 +53,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   vaultExportEncrypted: () => ipcRenderer.invoke('vault:exportEncrypted'),
   vaultImportEncrypted: (data: string) => ipcRenderer.invoke('vault:importEncrypted', data),
   vaultImportLegacy: (entries: Array<{ filename: string; data: string }>, masterPassword: string) => ipcRenderer.invoke('vault:importLegacy', entries, masterPassword),
-  vaultImportFromCloud: (providerId: string, versionId?: string) => ipcRenderer.invoke('vault:importFromCloud', providerId, versionId),
+  vaultImportFromCloud: (providerId: string, versionId?: string, masterPassword?: string) => ipcRenderer.invoke('vault:importFromCloud', providerId, versionId, masterPassword),
   vaultListCloudVersions: (providerId: string) => ipcRenderer.invoke('vault:listCloudVersions', providerId),
   vaultRepair: () => ipcRenderer.invoke('vault:repair'),
   storageConfigure: (config: any) => ipcRenderer.invoke('storage:configure', config),

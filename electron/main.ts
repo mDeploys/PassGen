@@ -1673,8 +1673,8 @@ ipcMain.handle('vault:importLegacy', async (_event, entries: Array<{ filename: s
   return vaultRepository.importLegacyEntries(entries, masterPassword)
 })
 
-ipcMain.handle('vault:importFromCloud', async (_event, providerId: string, versionId?: string) => {
-  await vaultRepository.importFromCloud(providerId as any, versionId)
+ipcMain.handle('vault:importFromCloud', async (_event, providerId: string, versionId?: string, masterPassword?: string) => {
+  await vaultRepository.importFromCloud(providerId as any, versionId, masterPassword)
   return { ok: true }
 })
 

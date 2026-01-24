@@ -448,7 +448,7 @@ export class VaultRepository {
     return provider.listVersions()
   }
 
-  async importFromCloud(providerId: ProviderId, versionId?: string): Promise<void> {
+  async importFromCloud(providerId: ProviderId, versionId?: string, masterPassword?: string): Promise<void> {
     await this.ensureUnlocked()
     const provider = await this.getProviderById(providerId)
     if (!provider) {
@@ -461,12 +461,23 @@ export class VaultRepository {
     const encrypted = versionId ? await provider.restoreVersion(versionId) : await provider.download()
     const raw = encrypted.toString('utf8')
     const parsed = parseVaultFile(raw)
+    
+    let keyToUse = this.derivedKey as Buffer
+    
     if (this.vaultHeader && parsed.header.salt !== this.vaultHeader.salt) {
-      throw new Error('Vault key mismatch. Please re-enter your master password.')
+      if (masterPassword) {
+        // If password is provided, derive the new key for this vault
+        keyToUse = await deriveKeyFromHeader(masterPassword, parsed.header)
+      } else {
+        // Throw specific error code for frontend to catch
+        throw new Error('VAULT_KEY_MISMATCH')
+      }
     }
-    const payload = await decryptVaultFileWithKey(parsed, this.derivedKey as Buffer)
+
+    const payload = await decryptVaultFileWithKey(parsed, keyToUse)
     this.vaultPayload = payload
     this.vaultHeader = parsed.header
+    this.derivedKey = keyToUse // Update current session key to match the imported vault
     await this.writeLocalVault(parsed)
   }
 

@@ -37,6 +37,11 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
   const [cloudImportProvider, setCloudImportProvider] = useState<ProviderId>('google-drive')
   const [cloudImportBusy, setCloudImportBusy] = useState(false)
   const [cloudImportError, setCloudImportError] = useState<string | null>(null)
+
+  // Cloud recovery state
+  const [isKeyMismatch, setIsKeyMismatch] = useState(false)
+  const [recoveryPassword, setRecoveryPassword] = useState('')
+
   const [cloudVersions, setCloudVersions] = useState<any[]>([])
   const [isSearchingCloud, setIsSearchingCloud] = useState(false)
   const [selectedVersionId, setSelectedVersionId] = useState<string>('')
@@ -315,8 +320,9 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
   }
 
   const openCloudImport = () => {
-    setCloudImportError(null)
     setShowCloudImport(true)
+    setIsKeyMismatch(false)
+    setRecoveryPassword('')
   }
 
   const handleCloudImport = async () => {
@@ -357,12 +363,21 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
     try {
       setCloudImportBusy(true)
       setCloudImportError(null)
-      await api.vaultImportFromCloud(cloudImportProvider, selectedVersionId)
+
+      const pwd = isKeyMismatch ? recoveryPassword : undefined
+      await api.vaultImportFromCloud(cloudImportProvider, selectedVersionId, pwd)
+
       await loadEntries()
       setShowCloudImport(false)
       alert(t('Cloud import complete.'))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      if (message.includes('VAULT_KEY_MISMATCH')) {
+        setIsKeyMismatch(true)
+        setCloudImportError(t('This backup uses a different encryption key. Please enter the master password for this backup below.'))
+        setCloudImportBusy(false)
+        return
+      }
       setCloudImportError(t('Cloud import failed: {{message}}', { message }))
     } finally {
       setCloudImportBusy(false)
@@ -832,13 +847,31 @@ function PasswordVault({ storageManager, onGenerateNew }: PasswordVaultProps) {
               )}
             </div>
 
+            {isKeyMismatch && (
+              <div className="recovery-password-section">
+                <label className="version-label" style={{ color: '#ef4444' }}>{t('Backup Master Password')}</label>
+                <input
+                  type="password"
+                  className="master-password-input"
+                  value={recoveryPassword}
+                  onChange={(e) => setRecoveryPassword(e.target.value)}
+                  placeholder={t('Enter password for this backup')}
+                  autoFocus
+                />
+              </div>
+            )}
+
             {cloudImportError && <div className="cloud-import-error">{cloudImportError}</div>}
             <div className="cloud-import-actions">
               <button className="btn-secondary" onClick={() => setShowCloudImport(false)} disabled={cloudImportBusy}>
                 {t('Cancel')}
               </button>
-              <button className="btn-primary" onClick={handleCloudImport} disabled={cloudImportBusy || isSearchingCloud || cloudVersions.length === 0}>
-                {cloudImportBusy ? t('Importing...') : t('Restore Selected')}
+              <button
+                className="btn-primary"
+                onClick={handleCloudImport}
+                disabled={cloudImportBusy || isSearchingCloud || cloudVersions.length === 0}
+              >
+                {cloudImportBusy ? t('Importing...') : (isKeyMismatch ? t('Unlock & Restore') : t('Restore Selected'))}
               </button>
             </div>
           </div>

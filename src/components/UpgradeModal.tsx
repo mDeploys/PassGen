@@ -24,6 +24,7 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
   }, [open])
 
   const [licenseKey, setLicenseKey] = useState('')
+  const [activationCode, setActivationCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
 
   const redeemLicenseKey = async () => {
@@ -42,10 +43,21 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
       } else {
         alert(t('Activation pending. Please contact support if it does not update soon.'))
       }
-    } catch (e:any) {
+    } catch (e: any) {
       alert(t('License redeem failed: {{message}}', { message: e.message }))
     } finally {
       setRedeeming(false)
+    }
+  }
+
+  const redeemActivationCode = () => {
+    if (!activationCode) { alert(t('Enter activation code')); return }
+    if (store.verifyActivationCode(activationCode)) {
+      store.setPremium(true)
+      onClose()
+      alert(t('Premium activated locally. Enjoy!'))
+    } else {
+      alert(t('Invalid activation code for this device'))
     }
   }
 
@@ -144,7 +156,7 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
                 type="text"
                 placeholder={t('Enter license key')}
                 value={licenseKey}
-                onChange={(e)=>setLicenseKey(e.target.value)}
+                onChange={(e) => setLicenseKey(e.target.value)}
                 className="ltr-input"
               />
             </div>
@@ -152,6 +164,33 @@ export default function UpgradeModal({ open, onClose }: UpgradeModalProps) {
           <div className="activation-actions">
             <button className="btn-primary" onClick={redeemLicenseKey} disabled={redeeming}>
               {redeeming ? t('Redeeming...') : t('Redeem Key')}
+            </button>
+          </div>
+        </div>
+
+        <div className="activation-card">
+          <div className="section-heading">
+            <span className="pill warning">{t('Step 3')}</span>
+            <div>
+              <div className="section-title">{t('Activation Code')}</div>
+              <div className="section-sub">{t('If you received a 10-character code from the dashboard, enter it here.')}</div>
+            </div>
+          </div>
+          <div className="activation-fields">
+            <div className="email-capture">
+              <label>{t('Activation Code')}</label>
+              <input
+                type="text"
+                placeholder={t('Enter 10-char code')}
+                value={activationCode}
+                onChange={(e) => setActivationCode(e.target.value)}
+                className="ltr-input"
+              />
+            </div>
+          </div>
+          <div className="activation-actions">
+            <button className="btn-primary" onClick={redeemActivationCode}>
+              {t('Activate')}
             </button>
             <button className="btn-secondary ghost" onClick={onClose}>{t('Close')}</button>
           </div>

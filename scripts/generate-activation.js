@@ -9,7 +9,7 @@
 //   4) Fallback "PG-SEC-2025" (not recommended for production)
 // If .env exists, we load it automatically so VITE_SELLER_SECRET or SELLER_SECRET can be defined there.
 
-try { require('dotenv').config() } catch {}
+try { require('dotenv').config() } catch { }
 const crypto = require('crypto')
 const readline = require('readline')
 
@@ -35,7 +35,7 @@ function computeCode(installId, email, secret) {
   let installId = args.install || process.env.INSTALL_ID
   let email = args.email || process.env.EMAIL
   const clean = (s) => (s || '').replace(/\s+#.*$/, '').trim()
-  const secret = args.secret || clean(process.env.SELLER_SECRET) || clean(process.env.VITE_SELLER_SECRET) || 'PG-SEC-2025'
+  const secret = args.secret || clean(process.env.SELLER_SECRET) || clean(process.env.VITE_SELLER_SECRET) || 'W1IcMo9/5Kw7Mu+kFsXgoep4bcKzfvofElTnvra7PD8='
 
   // Interactive fallback if args/env not provided (helps on Windows npm where flags may not pass through)
   if (!installId || !email) {

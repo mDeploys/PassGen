@@ -1,6 +1,6 @@
 {
   "name": "passgen",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "A Vault secure password generator desktop application",
   "engines": {
     "node": ">=20.0.0"
@@ -10,13 +10,10 @@
     "dev": "vite",
     "build": "node scripts/write-build-info.js && tsc && vite build && node scripts/sync-icons.js && electron-builder",
     "preview": "vite preview",
-
     "electron:dev": "tsc && concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "node scripts/write-build-info.js && tsc && vite build && node scripts/sync-icons.js && electron-builder",
-
     "prebuild:msix": "node scripts/write-build-info.js && tsc && vite build && node scripts/sync-icons.js && node scripts/prepare-store-icons.js",
     "build:msix": "cross-env STORE_BUILD=1 electron-builder --win appx",
-
     "test:vault": "tsc && electron . --vault-self-test",
     "test:oauth": "tsc && electron . --oauth-ipc-test",
     "test:auth": "tsc && electron . --auth-test",
@@ -26,7 +23,12 @@
     "dashboard": "node dashboard-server.js",
     "discord-bot": "node discord-bot.js"
   },
-  "keywords": ["password", "generator", "electron", "desktop"],
+  "keywords": [
+    "password",
+    "generator",
+    "electron",
+    "desktop"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
@@ -76,17 +78,36 @@
     "directories": {
       "output": "release"
     },
-    "files": ["dist/**/*", "dist-electron/**/*"],
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
     "extraResources": [
-      { "from": "resources/.env", "to": ".env" },
-      { "from": "resources/build-info.json", "to": "build-info.json" }
+      {
+        "from": "resources/.env",
+        "to": ".env"
+      },
+      {
+        "from": "resources/build-info.json",
+        "to": "build-info.json"
+      }
     ],
     "win": {
       "icon": "build/icon.ico",
       "publisherName": "CN=92CE8CEC-534B-45DF-B9FE-D346FD430CC0",
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "appx", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "appx",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "appx": {
@@ -108,11 +129,15 @@
     },
     "mac": {
       "icon": "public/icon.png",
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "linux": {
       "icon": "public/icon.png",
-      "target": ["AppImage"]
+      "target": [
+        "AppImage"
+      ]
     }
   }
 }

@@ -59,7 +59,7 @@ async function ensureStoreIcons() {
       .toBuffer()
   }
 
-  const sizes = [256, 512]
+  const sizes = [16, 32, 48, 64, 256]
   const buffers = []
 
   for (const size of sizes) {

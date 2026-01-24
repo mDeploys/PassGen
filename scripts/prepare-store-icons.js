@@ -30,31 +30,11 @@ async function ensureStoreIcons() {
 
   const transparentKeyThreshold = 8
   const renderIconBuffer = async (width, height) => {
-    const { data, info } = await sharp(srcIcon)
+    return sharp(srcIcon)
       .resize(width, height, {
         fit: 'contain',
         background: { r: 0, g: 0, b: 0, alpha: 0 }
       })
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true })
-
-    for (let i = 0; i < data.length; i += info.channels) {
-      const r = data[i]
-      const g = data[i + 1]
-      const b = data[i + 2]
-      if (r <= transparentKeyThreshold && g <= transparentKeyThreshold && b <= transparentKeyThreshold) {
-        data[i + 3] = 0
-      }
-    }
-
-    return sharp(data, {
-      raw: {
-        width: info.width,
-        height: info.height,
-        channels: info.channels
-      }
-    })
       .png()
       .toBuffer()
   }
